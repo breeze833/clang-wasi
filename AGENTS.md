@@ -42,7 +42,7 @@ The build pipeline consists of two stages followed by community-compatible packa
 3. **Packaging (`dist/`):** Outputs the canonical 4-component community toolchain:
    - `clang.wasm`: Clang compiler optimized via `wasm-opt -O2`.
    - `lld.wasm`: LLD linker optimized via `wasm-opt -O2`.
-   - `memfs.wasm`: WASI in-memory filesystem module (from community `binji/wasm-clang`).
+   - `memfs.wasm`: WASI in-memory filesystem module compiled natively from `src/memfs/` via `wasi-sdk` and optimized via `wasm-opt -O3`.
    - `sysroot.tar`: Complete standalone sysroot archive containing standard C/C++ headers (`stdio.h`, `<vector>`), static libraries (`libc.a`, `libc++.a`, `crt1.o`), and Clang runtime builtins (`libclang_rt.builtins.a`).
 4. **Distribution Archive (`clang-wasi-19.tar.gz`):** Bundles all four artifacts above into a compressed release tarball.
 
@@ -54,3 +54,27 @@ The build pipeline consists of two stages followed by community-compatible packa
 * **Patch Detection:** Always verify whether `scripts/patches/llvm-wasi-${LLVM_VERSION}.patch` is already applied using `git -C llvm-project apply --reverse --check "${PATCH_FILE}"`. If reverse check passes, skip patching. If forward check passes, apply it. If both fail, fail with an error rather than ignoring failures with `|| true`.
 * **Atomic Processing:** Always write to temporary paths (`.tmp`, `.opt`) before moving to the final output file to prevent corrupt binaries if interrupted mid-process.
 * **Incremental Steps:** Avoid running time-consuming optimization passes (`wasm-opt`) or tarball archiving if the source binaries have not changed (`[ "${src}" -nt "${dest}" ]`).
+
+---
+
+## 6. Native MemFS Architecture & LLVM 19 Compatibility
+
+`dist/memfs.wasm` must be built directly from `src/memfs/` (`memfs.c`, `stb_sprintf.h`) using `${WASI_SDK_PATH}/bin/clang` and `wasm-ld`, replacing the legacy prebuilt binary from `binji/wasm-clang`.
+
+Testing revealed four specific ABI and structural mismatches between the 2019 `binji/wasm-clang` binary and modern LLVM 19:
+
+1. **`__wasi_filestat_t` Struct Offset Mismatch:**
+   * The 2019 `memfs.wasm` was built against an early `wasi_unstable` ABI where `nlink` was 32-bit (`uint32_t`), placing `size` at byte offset 24.
+   * Modern LLVM 19 (`wasi_snapshot_preview1`) follows the standard WASI specification with 64-bit `nlink` (`__wasi_linkcount_t`), placing `size` at byte offset 32.
+   * **Consequence:** Clang 19 reads `size = 0` for all files mounted in MemFS, failing with: `error: ISO C requires a translation unit to contain at least one declaration [-Wempty-translation-unit]`.
+2. **`fd_seek` Whence Enum Inversion:**
+   * The 2019 `memfs.wasm` used internal constants: `0 = CUR`, `1 = END`, `2 = SET`.
+   * Standard WASI Preview 1 specifies: `0 = SET`, `1 = CUR`, `2 = END`.
+   * **Consequence:** When Clang seeks back to patch WebAssembly section lengths, MemFS treats absolute seek 0 as relative seek CUR, corrupting the emitted object file with zero-length sections.
+3. **Hardcoded Inode Table Limit (`MAX_NODES = 1024`):**
+   * The 2019 `memfs.wasm` allocated a static array `nodes[1024]`.
+   * Upstream LLVM 19 `sysroot.tar` contains 4,512 entries (full C++ standard library headers, runtime libraries, and multiple target triples).
+   * **Consequence:** Eagerly unpacking `sysroot.tar` on boot crashes with `RuntimeError: unreachable` at entry 1076 (`inode != INVALID_INODE`). Native `src/memfs/memfs.c` provides dynamic inode table reallocation without a hard 1024 limit.
+4. **Inode Reallocation Offset Bug on Unlink:**
+   * `path_unlink_file` in the 2019 `memfs.wasm` does not reset the buffer write offset on reused inodes.
+   * **Consequence:** Re-creating a file after unlinking retains stale write offsets, requiring clumsy truncate-before-unlink workarounds. Native MemFS completely resets inode buffers and file descriptor offsets on deletion and reuse.

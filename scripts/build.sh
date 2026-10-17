@@ -121,17 +121,50 @@ process_binary() {
 process_binary "build-wasi/bin/clang" "dist/clang.wasm" "clang"
 process_binary "build-wasi/bin/lld" "dist/lld.wasm" "lld"
 
-# Fetch memfs.wasm (WASI in-memory filesystem bridge for browser environments)
-MEMFS_URL="https://raw.githubusercontent.com/binji/wasm-clang/master/memfs"
-if [ ! -f "dist/memfs.wasm" ] || [ ! -s "dist/memfs.wasm" ]; then
-  echo "Fetching memfs.wasm from community contribution..."
-  rm -f "dist/memfs.wasm.tmp"
-  curl -sSL "${MEMFS_URL}" -o "dist/memfs.wasm.tmp"
-  mv "dist/memfs.wasm.tmp" "dist/memfs.wasm"
-  chmod 644 "dist/memfs.wasm"
-  echo "memfs.wasm downloaded successfully."
+# Build memfs.wasm (WASI in-memory filesystem bridge for browser environments)
+MEMFS_DEST="dist/memfs.wasm"
+needs_memfs_rebuild() {
+  if [ ! -f "${MEMFS_DEST}" ]; then
+    return 0
+  fi
+  if [ "src/memfs/memfs.c" -nt "${MEMFS_DEST}" ] || [ "src/memfs/stb_sprintf.h" -nt "${MEMFS_DEST}" ]; then
+    return 0
+  fi
+  return 1
+}
+
+if needs_memfs_rebuild; then
+  echo "=== Building modern memfs.wasm ==="
+  mkdir -p build-memfs
+
+  "${WASI_SDK_PATH}/bin/clang" --target=wasm32-wasip1 \
+    --sysroot="${WASI_SDK_PATH}/share/wasi-sysroot" \
+    -Isrc/memfs -O2 -Wall -Wextra -Wno-unused-parameter \
+    -c src/memfs/memfs.c -o build-memfs/memfs.o
+
+  "${WASI_SDK_PATH}/bin/clang" --target=wasm32-wasip1 \
+    --sysroot="${WASI_SDK_PATH}/share/wasi-sysroot" \
+    -DSTB_SPRINTF_IMPLEMENTATION -x c -O2 \
+    -c src/memfs/stb_sprintf.h -o build-memfs/stb_sprintf.o
+
+  rm -f "${MEMFS_DEST}.tmp" "${MEMFS_DEST}.opt"
+  "${WASI_SDK_PATH}/bin/wasm-ld" \
+    -L"${WASI_SDK_PATH}/share/wasi-sysroot/lib/wasm32-wasip1" \
+    --no-entry --export-dynamic --allow-undefined -lc \
+    build-memfs/memfs.o build-memfs/stb_sprintf.o -o "${MEMFS_DEST}.tmp"
+
+  if command -v wasm-opt >/dev/null 2>&1; then
+    echo "Optimizing memfs.wasm with wasm-opt -O3..."
+    wasm-opt -O3 "${MEMFS_DEST}.tmp" -o "${MEMFS_DEST}.opt"
+    mv "${MEMFS_DEST}.opt" "${MEMFS_DEST}"
+    rm -f "${MEMFS_DEST}.tmp"
+  else
+    mv "${MEMFS_DEST}.tmp" "${MEMFS_DEST}"
+  fi
+  chmod 644 "${MEMFS_DEST}"
+  echo "memfs.wasm built and optimized successfully."
 else
-  echo "dist/memfs.wasm is up to date."
+  echo "${MEMFS_DEST} is up to date."
 fi
 
 # Assemble complete sysroot.tar (headers, static libraries, and compiler builtins)
