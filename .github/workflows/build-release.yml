@@ -1,0 +1,98 @@
+name: Build and Release WASI Toolchain
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Git release tag to create (e.g. v19.1.0). If empty, build and test only.'
+        required: false
+        type: string
+        default: ''
+      draft:
+        description: 'Create release as a draft'
+        required: false
+        type: boolean
+        default: false
+      prerelease:
+        description: 'Mark release as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Test WASI Toolchain
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang lld binaryen
+
+      - name: Setup Node.js (WASI test runtime)
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Build Clang and LLD WASM toolchain
+        run: |
+          chmod +x scripts/build.sh
+          ./scripts/build.sh
+
+      - name: Run Test Suite
+        run: |
+          chmod +x scripts/test.sh scripts/wasi-run.js
+          ./scripts/test.sh
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: clang-wasi-artifacts
+          path: |
+            dist/clang.wasm
+            dist/lld.wasm
+            dist/memfs.wasm
+            dist/sysroot.tar
+            clang-wasi-19.tar.gz
+          if-no-files-found: error
+
+      - name: Determine Release Tag
+        id: release_info
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.release_tag }}" ]; then
+            echo "tag=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref }}" =~ ^refs/tags/(.*) ]]; then
+            echo "tag=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        if: steps.release_info.outputs.should_release == 'true'
+        with:
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          name: ${{ steps.release_info.outputs.tag }}
+          draft: ${{ inputs.draft || false }}
+          prerelease: ${{ inputs.prerelease || false }}
+          files: |
+            dist/clang.wasm
+            dist/lld.wasm
+            dist/memfs.wasm
+            dist/sysroot.tar
+            clang-wasi-19.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+

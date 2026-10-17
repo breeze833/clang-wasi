@@ -1,0 +1,12 @@
+# Build directories
+build-native/
+build-wasi/
+dist/
+
+# Cloned dependencies and toolchains
+wasi-sdk/
+wasi-sdk-*/
+llvm-project/
+
+# Distribution archives
+*.tar.gz
