@@ -35,7 +35,7 @@ clang-wasi/
 │   ├── clang.wasm              # Clang compiler WebAssembly module
 │   ├── lld.wasm                # LLD linker WebAssembly module
 │   ├── memfs.wasm              # In-memory virtual filesystem module
-│   └── sysroot.tar             # Standalone C/C++ sysroot archive
+│   └── sysroot.tar.gz          # Standalone C/C++ sysroot archive
 ├── AGENTS.md                   # Development rules and platform constraints
 └── README.md
 ```
@@ -81,8 +81,8 @@ chmod +x scripts/build.sh
 4. **Stage 2:** Cross-compiles `clang` and `lld` using `wasi-sdk-p1.cmake` for `wasm32-wasip1`.
 5. Compiles native `memfs.wasm` from `src/memfs/` (`memfs.c`, `stb_sprintf.h`) via `wasi-sdk` and optimizes it with `wasm-opt -O3`.
 6. Strips and optimizes `clang.wasm` and `lld.wasm` with `wasm-opt -O2`.
-7. Assembles the standalone C/C++ sysroot archive (`dist/sysroot.tar`).
-8. Packages all 4 components (`clang.wasm`, `lld.wasm`, `memfs.wasm`, `sysroot.tar`) into `clang-wasi-19.tar.gz`.
+7. Assembles the standalone C/C++ sysroot archive (`dist/sysroot.tar.gz`).
+8. Packages all 4 components (`clang.wasm`, `lld.wasm`, `memfs.wasm`, `sysroot.tar.gz`) into `clang-wasi-19.tar.gz`.
 
 ---
 
@@ -184,7 +184,7 @@ Testing against modern LLVM 19 revealed four specific ABI and structural mismatc
 Releases are automated via GitHub Actions:
 
 * Pushing a version tag matching `v*` (e.g., `git tag v19.1.0 && git push origin v19.1.0`) triggers `.github/workflows/build-release.yml`.
-* The workflow compiles all modules in a clean runner and uploads the release artifacts (`clang.wasm`, `lld.wasm`, `memfs.wasm`, `sysroot.tar`, and `clang-wasi-19.tar.gz`) to GitHub Releases.
+* The workflow compiles all modules in a clean runner and uploads the release artifacts (`clang.wasm`, `lld.wasm`, `memfs.wasm`, `sysroot.tar.gz`, and `clang-wasi-19.tar.gz`) to GitHub Releases.
 
 ---
 

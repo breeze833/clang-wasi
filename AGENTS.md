@@ -43,7 +43,7 @@ The build pipeline consists of two stages followed by community-compatible packa
    - `clang.wasm`: Clang compiler optimized via `wasm-opt -O2`.
    - `lld.wasm`: LLD linker optimized via `wasm-opt -O2`.
    - `memfs.wasm`: WASI in-memory filesystem module compiled natively from `src/memfs/` via `wasi-sdk` and optimized via `wasm-opt -O3`.
-   - `sysroot.tar`: Complete standalone sysroot archive containing standard C/C++ headers (`stdio.h`, `<vector>`), static libraries (`libc.a`, `libc++.a`, `crt1.o`), and Clang runtime builtins (`libclang_rt.builtins.a`).
+   - `sysroot.tar.gz`: Complete standalone sysroot archive containing standard C/C++ headers (`stdio.h`, `<vector>`), static libraries (`libc.a`, `libc++.a`, `crt1.o`), and Clang runtime builtins (`libclang_rt.builtins.a`).
 4. **Distribution Archive (`clang-wasi-19.tar.gz`):** Bundles all four artifacts above into a compressed release tarball.
 
 ---

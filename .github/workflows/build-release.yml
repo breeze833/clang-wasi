@@ -61,7 +61,7 @@ jobs:
             dist/clang.wasm
             dist/lld.wasm
             dist/memfs.wasm
-            dist/sysroot.tar
+            dist/sysroot.tar.gz
             clang-wasi-19.tar.gz
           if-no-files-found: error
 
@@ -90,7 +90,7 @@ jobs:
             dist/clang.wasm
             dist/lld.wasm
             dist/memfs.wasm
-            dist/sysroot.tar
+            dist/sysroot.tar.gz
             clang-wasi-19.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

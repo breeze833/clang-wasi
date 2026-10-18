@@ -9,7 +9,7 @@ DIST_DIR="${REPO_ROOT}/dist"
 CLANG_WASM="${DIST_DIR}/clang.wasm"
 LLD_WASM="${DIST_DIR}/lld.wasm"
 MEMFS_WASM="${DIST_DIR}/memfs.wasm"
-SYSROOT_TAR="${DIST_DIR}/sysroot.tar"
+SYSROOT_ARCHIVE="${DIST_DIR}/sysroot.tar.gz"
 
 echo "=============================================="
 echo "    WASI Toolchain Test Suite (clang-wasi)    "
@@ -18,7 +18,7 @@ echo "=============================================="
 # 1. Validate distribution artifacts
 echo "=== Step 1: Checking release artifacts in ${DIST_DIR} ==="
 MISSING=0
-for f in "${CLANG_WASM}" "${LLD_WASM}" "${MEMFS_WASM}" "${SYSROOT_TAR}"; do
+for f in "${CLANG_WASM}" "${LLD_WASM}" "${MEMFS_WASM}" "${SYSROOT_ARCHIVE}"; do
   if [ ! -f "${f}" ]; then
     echo "[-] Missing artifact: ${f}" >&2
     MISSING=1
@@ -50,13 +50,13 @@ else
   exit 1
 fi
 
-# 3. Setup temporary workspace and unpack sysroot.tar
+# 3. Setup temporary workspace and unpack sysroot.tar.gz
 TEST_TMP="$(mktemp -d /tmp/clang-wasi-test.XXXXXX)"
 trap 'rm -rf "${TEST_TMP}"' EXIT
 mkdir -p "${TEST_TMP}/workspace" "${TEST_TMP}/sysroot"
 
-echo "=== Step 3: Unpacking standalone sysroot.tar ==="
-tar -xf "${SYSROOT_TAR}" -C "${TEST_TMP}/sysroot"
+echo "=== Step 3: Unpacking standalone sysroot.tar.gz ==="
+tar -xf "${SYSROOT_ARCHIVE}" -C "${TEST_TMP}/sysroot"
 echo "[+] Standalone sysroot extracted successfully."
 
 # 4. Test toolchain version identification

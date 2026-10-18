@@ -167,25 +167,25 @@ else
   echo "${MEMFS_DEST} is up to date."
 fi
 
-# Assemble complete sysroot.tar (headers, static libraries, and compiler builtins)
-SYSROOT_TAR="dist/sysroot.tar"
+# Assemble complete sysroot.tar.gz (headers, static libraries, and compiler builtins)
+SYSROOT_ARCHIVE="dist/sysroot.tar.gz"
 SYSROOT_SRC="${WASI_SDK_PATH}/share/wasi-sysroot"
 CLANG_HEADERS_SRC="llvm-project/clang/lib/Headers"
 
 needs_sysroot_rebuild() {
-  if [ ! -f "${SYSROOT_TAR}" ]; then
+  if [ ! -f "${SYSROOT_ARCHIVE}" ]; then
     return 0
   fi
-  if [ "${SYSROOT_SRC}" -nt "${SYSROOT_TAR}" ]; then
+  if [ "${SYSROOT_SRC}" -nt "${SYSROOT_ARCHIVE}" ]; then
     return 0
   fi
   return 1
 }
 
 if needs_sysroot_rebuild; then
-  echo "Assembling sysroot archive (${SYSROOT_TAR})..."
+  echo "Assembling sysroot archive (${SYSROOT_ARCHIVE})..."
   STAGING_DIR="dist/.sysroot_staging"
-  rm -rf "${STAGING_DIR}" "${SYSROOT_TAR}.tmp"
+  rm -rf "${STAGING_DIR}" "${SYSROOT_ARCHIVE}.tmp"
   mkdir -p "${STAGING_DIR}/include" "${STAGING_DIR}/lib"
 
   # Single-threaded WASI Preview 1 headers & libraries
@@ -231,17 +231,19 @@ if needs_sysroot_rebuild; then
     cp "${BUILTIN_WASI}" "${STAGING_DIR}/lib/clang/19/lib/wasm32-unknown-wasi/"
   fi
 
-  tar -cf "${SYSROOT_TAR}.tmp" -C "${STAGING_DIR}" .
-  mv "${SYSROOT_TAR}.tmp" "${SYSROOT_TAR}"
-  chmod 644 "${SYSROOT_TAR}"
+  tar -czf "${SYSROOT_ARCHIVE}.tmp" -C "${STAGING_DIR}" .
+  mv "${SYSROOT_ARCHIVE}.tmp" "${SYSROOT_ARCHIVE}"
+  chmod 644 "${SYSROOT_ARCHIVE}"
   rm -rf "${STAGING_DIR}"
-  echo "sysroot.tar assembled successfully."
+  rm -f dist/sysroot.tar
+  echo "sysroot.tar.gz assembled successfully."
 else
-  echo "${SYSROOT_TAR} is up to date."
+  echo "${SYSROOT_ARCHIVE} is up to date."
 fi
 
-# Clean up any legacy unbundled lib directory in dist
+# Clean up any legacy unbundled lib directory or uncompressed sysroot tar in dist
 rm -rf dist/lib
+rm -f dist/sysroot.tar
 
 # Enforce uniform directory and file permissions
 chmod 755 dist
@@ -252,7 +254,7 @@ if [ ! -f "${TAR_FILE}" ] || \
    [ "dist/clang.wasm" -nt "${TAR_FILE}" ] || \
    [ "dist/lld.wasm" -nt "${TAR_FILE}" ] || \
    [ "dist/memfs.wasm" -nt "${TAR_FILE}" ] || \
-   [ "dist/sysroot.tar" -nt "${TAR_FILE}" ]; then
+   [ "${SYSROOT_ARCHIVE}" -nt "${TAR_FILE}" ]; then
   echo "Packaging distribution archive ${TAR_FILE}..."
   rm -f "${TAR_FILE}.tmp"
   tar -czf "${TAR_FILE}.tmp" -C dist .
