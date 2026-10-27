@@ -1,7 +1,6 @@
 # Build directories
 build-native/
 build-wasi/
-build-memfs/
 dist/
 
 # Cloned dependencies and toolchains

@@ -39,12 +39,11 @@ When developing, debugging, or building this project, autonomous agents must adh
 The build pipeline consists of two stages followed by community-compatible packaging:
 1. **Stage 1 (Host Build):** Compiles host utilities `llvm-tblgen` and `clang-tblgen` natively inside `build-native/`.
 2. **Stage 2 (WASI Cross-compilation):** Cross-compiles `clang` and `lld` using `wasi-sdk-p1.cmake` inside `build-wasi/`.
-3. **Packaging (`dist/`):** Outputs the canonical 4-component community toolchain:
+3. **Packaging (`dist/`):** Outputs the release toolchain:
    - `clang.wasm`: Clang compiler optimized via `wasm-opt -O2`.
    - `lld.wasm`: LLD linker optimized via `wasm-opt -O2`.
-   - `memfs.wasm`: WASI in-memory filesystem module compiled natively from `src/memfs/` via `wasi-sdk` and optimized via `wasm-opt -O3`.
    - `sysroot.tar.gz`: Complete standalone sysroot archive containing standard C/C++ headers (`stdio.h`, `<vector>`), static libraries (`libc.a`, `libc++.a`, `crt1.o`), and Clang runtime builtins (`libclang_rt.builtins.a`).
-4. **Distribution Archive (`clang-wasi-19.tar.gz`):** Bundles all four artifacts above into a compressed release tarball.
+4. **Distribution Archive (`clang-wasi-19.tar.gz`):** Bundles the toolchain components into a compressed release tarball.
 
 ---
 
@@ -57,33 +56,9 @@ The build pipeline consists of two stages followed by community-compatible packa
 
 ---
 
-## 6. Native MemFS Architecture & LLVM 19 Compatibility
+## 6. Pure JavaScript WasiHost & Direct VFS Architecture
 
-`dist/memfs.wasm` must be built directly from `src/memfs/` (`memfs.c`, `stb_sprintf.h`) using `${WASI_SDK_PATH}/bin/clang` and `wasm-ld`, replacing the legacy prebuilt binary from `binji/wasm-clang`.
-
-Testing revealed four specific ABI and structural mismatches between the 2019 `binji/wasm-clang` binary and modern LLVM 19:
-
-1. **`__wasi_filestat_t` Struct Offset Mismatch:**
-   * The 2019 `memfs.wasm` was built against an early `wasi_unstable` ABI where `nlink` was 32-bit (`uint32_t`), placing `size` at byte offset 24.
-   * Modern LLVM 19 (`wasi_snapshot_preview1`) follows the standard WASI specification with 64-bit `nlink` (`__wasi_linkcount_t`), placing `size` at byte offset 32.
-   * **Consequence:** Clang 19 reads `size = 0` for all files mounted in MemFS, failing with: `error: ISO C requires a translation unit to contain at least one declaration [-Wempty-translation-unit]`.
-2. **`fd_seek` Whence Enum Inversion:**
-   * The 2019 `memfs.wasm` used internal constants: `0 = CUR`, `1 = END`, `2 = SET`.
-   * Standard WASI Preview 1 specifies: `0 = SET`, `1 = CUR`, `2 = END`.
-   * **Consequence:** When Clang seeks back to patch WebAssembly section lengths, MemFS treats absolute seek 0 as relative seek CUR, corrupting the emitted object file with zero-length sections.
-3. **Hardcoded Inode Table Limit (`MAX_NODES = 1024`):**
-   * The 2019 `memfs.wasm` allocated a static array `nodes[1024]`.
-   * Upstream LLVM 19 `sysroot.tar` contains 4,512 entries (full C++ standard library headers, runtime libraries, and multiple target triples).
-   * **Consequence:** Eagerly unpacking `sysroot.tar` on boot crashes with `RuntimeError: unreachable` at entry 1076 (`inode != INVALID_INODE`). Native `src/memfs/memfs.c` provides dynamic inode table reallocation without a hard 1024 limit.
-4. **Inode Reallocation Offset Bug on Unlink:**
-   * `path_unlink_file` in the 2019 `memfs.wasm` does not reset the buffer write offset on reused inodes.
-   * **Consequence:** Re-creating a file after unlinking retains stale write offsets, requiring clumsy truncate-before-unlink workarounds. Native MemFS completely resets inode buffers and file descriptor offsets on deletion and reuse.
-
----
-
-## 7. Pure JavaScript WasiHost & Direct VFS Architecture
-
-While `memfs.wasm` is provided for C-level POSIX filesystem emulation, this repository also provides `src/wasi-host.js`: a zero-dependency, pure JavaScript WASI Preview 1 host directly backed by an in-memory `Map` or Virtual File System (VFS).
+This repository eliminates `memfs.wasm` entirely in favor of `src/wasi-host.js`: a zero-dependency, pure JavaScript WASI Preview 1 host directly backed by an in-memory `Map` or Virtual File System (VFS).
 
 ### Advantages over MemFS:
 1. **Zero Double-Buffering:** Files reside directly in JavaScript `Uint8Array` memory; no synchronization or bidirectional mirroring between JavaScript VFS and a secondary Wasm linear memory is needed.

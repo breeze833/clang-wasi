@@ -30,11 +30,12 @@ clang-wasi/
 │   └── patches/
 │       └── llvm-wasi-19.1.0.patch # Version-specific WASI compatibility patch
 ├── src/
-│   └── memfs/                  # Native MemFS implementation (memfs.c, stb_sprintf.h)
+│   └── wasi-host.js            # Standalone zero-dependency pure JS WASI Preview 1 host
+├── examples/
+│   └── wasi-host-run.js        # Standalone in-memory C compilation & execution example
 ├── dist/                       # Build output artifacts (generated)
 │   ├── clang.wasm              # Clang compiler WebAssembly module
 │   ├── lld.wasm                # LLD linker WebAssembly module
-│   ├── memfs.wasm              # In-memory virtual filesystem module
 │   └── sysroot.tar.gz          # Standalone C/C++ sysroot archive
 ├── AGENTS.md                   # Development rules and platform constraints
 └── README.md
@@ -79,10 +80,9 @@ chmod +x scripts/build.sh
 2. Clones the specified LLVM release tag (`llvmorg-19.1.0`) with `--depth 1` and applies WASI platform patches.
 3. **Stage 1:** Compiles native host TableGen utilities (`llvm-tblgen`, `clang-tblgen`).
 4. **Stage 2:** Cross-compiles `clang` and `lld` using `wasi-sdk-p1.cmake` for `wasm32-wasip1`.
-5. Compiles native `memfs.wasm` from `src/memfs/` (`memfs.c`, `stb_sprintf.h`) via `wasi-sdk` and optimizes it with `wasm-opt -O3`.
-6. Strips and optimizes `clang.wasm` and `lld.wasm` with `wasm-opt -O2`.
-7. Assembles the standalone C/C++ sysroot archive (`dist/sysroot.tar.gz`).
-8. Packages all 4 components (`clang.wasm`, `lld.wasm`, `memfs.wasm`, `sysroot.tar.gz`) into `clang-wasi-19.tar.gz`.
+5. Strips and optimizes `clang.wasm` and `lld.wasm` with `wasm-opt -O2`.
+6. Assembles the standalone C/C++ sysroot archive (`dist/sysroot.tar.gz`).
+7. Packages all components (`clang.wasm`, `lld.wasm`, `sysroot.tar.gz`) into `clang-wasi-19.tar.gz`.
 
 ---
 
@@ -190,27 +190,16 @@ wasi.start(instance);
 
 ---
 
-## Native MemFS & LLVM 19 Compatibility
+## Zero-MemFS Architecture with Pure JavaScript WasiHost
 
-This repository compiles `memfs.wasm` directly from source (`src/memfs/memfs.c` and `stb_sprintf.h`) using `wasi-sdk` rather than relying on legacy precompiled binaries (such as the 2019 `binji/wasm-clang` release).
+Historically, projects like `binji/wasm-clang` (2019) relied on a compiled `memfs.wasm` module to hold an in-memory POSIX filesystem inside WebAssembly linear memory. That pattern suffered from severe drawbacks:
+* **Double-buffering & Memory Duplication**: Every file had to be copied into `memfs.wasm`'s memory before Clang could read it, and copied back out to JavaScript after compilation.
+* **ABI & Inode Limitations**: Legacy MemFS suffered from 32-bit `nlink` mismatches, seek whence inversion, hardcoded 1024-inode limits, and unlinking bugs.
 
-Testing against modern LLVM 19 revealed four specific ABI and structural mismatches that required this rewrite:
-
-1. **`__wasi_filestat_t` Struct Offset Mismatch:**
-   * The 2019 binary was built against an early `wasi_unstable` ABI with 32-bit `nlink`, placing `size` at byte offset 24.
-   * Standard WASI Preview 1 (`wasi_snapshot_preview1`) in LLVM 19 specifies 64-bit `nlink`, placing `size` at byte offset 32.
-   * *Impact:* Clang 19 read `size = 0` for all files in MemFS, failing with `error: ISO C requires a translation unit to contain at least one declaration [-Wempty-translation-unit]`.
-2. **`fd_seek` Whence Enum Inversion:**
-   * The legacy binary used internal constants `0 = CUR`, `1 = END`, `2 = SET`.
-   * Standard WASI Preview 1 specifies `0 = SET`, `1 = CUR`, `2 = END`.
-   * *Impact:* When Clang sought back to patch WebAssembly section lengths, MemFS treated absolute seek `0` as relative seek `CUR`, corrupting the output object file with zero-length sections.
-3. **Hardcoded Inode Table Limit (`MAX_NODES = 1024`):**
-   * The legacy binary used a static array `nodes[1024]`.
-   * Upstream LLVM 19 sysroot contains 4,512 entries across the standard library and multiple triples.
-   * *Impact:* Unpacking `sysroot.tar` crashed on boot with `RuntimeError: unreachable` at entry 1076. Native MemFS implements a dynamically resizing inode table without a fixed limit.
-4. **Inode Reallocation Offset Bug on Unlink:**
-   * In legacy MemFS, `path_unlink_file` failed to reset buffer write offsets on reused inodes.
-   * *Impact:* Recreated files retained stale write offsets, requiring truncate-before-unlink workarounds. Native MemFS ensures buffers and descriptor offsets are cleanly zeroed upon unlink and reallocation.
+This repository eliminates `memfs.wasm` entirely in favor of **`src/wasi-host.js`**:
+* **Direct JavaScript Memory**: Files reside directly in standard JavaScript `Map` or `Uint8Array` memory without Wasm linear memory copying.
+* **Zero Dependencies**: Standard WASI Preview 1 ABI implementation running out of the box in Node.js and modern browser environments.
+* **Dynamic Scale**: File sizes and directories scale naturally with the host JavaScript engine without fixed inode table limits.
 
 ---
 
@@ -219,7 +208,7 @@ Testing against modern LLVM 19 revealed four specific ABI and structural mismatc
 Releases are automated via GitHub Actions:
 
 * Pushing a version tag matching `v*` (e.g., `git tag v19.1.0 && git push origin v19.1.0`) triggers `.github/workflows/build-release.yml`.
-* The workflow compiles all modules in a clean runner and uploads the release artifacts (`clang.wasm`, `lld.wasm`, `memfs.wasm`, `sysroot.tar.gz`, and `clang-wasi-19.tar.gz`) to GitHub Releases.
+* The workflow compiles all modules in a clean runner and uploads the release artifacts (`clang.wasm`, `lld.wasm`, `sysroot.tar.gz`, and `clang-wasi-19.tar.gz`) to GitHub Releases.
 
 ---
 

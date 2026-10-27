@@ -8,7 +8,6 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DIST_DIR="${REPO_ROOT}/dist"
 CLANG_WASM="${DIST_DIR}/clang.wasm"
 LLD_WASM="${DIST_DIR}/lld.wasm"
-MEMFS_WASM="${DIST_DIR}/memfs.wasm"
 SYSROOT_ARCHIVE="${DIST_DIR}/sysroot.tar.gz"
 
 echo "=============================================="
@@ -18,7 +17,7 @@ echo "=============================================="
 # 1. Validate distribution artifacts
 echo "=== Step 1: Checking release artifacts in ${DIST_DIR} ==="
 MISSING=0
-for f in "${CLANG_WASM}" "${LLD_WASM}" "${MEMFS_WASM}" "${SYSROOT_ARCHIVE}"; do
+for f in "${CLANG_WASM}" "${LLD_WASM}" "${SYSROOT_ARCHIVE}"; do
   if [ ! -f "${f}" ]; then
     echo "[-] Missing artifact: ${f}" >&2
     MISSING=1
