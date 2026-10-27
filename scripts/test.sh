@@ -190,6 +190,12 @@ if [ "${CPP_OUTPUT}" != "Hello from WASI C++19!" ]; then
 fi
 echo "[PASS] C++ compilation, linking, and execution verified!"
 
+# 7. Test standalone WasiHost pure JavaScript runner
+if command -v node &> /dev/null; then
+  echo "=== Step 7: Testing standalone WasiHost in-memory VFS runner ==="
+  node "${SCRIPT_DIR}/test-wasi-host.js"
+fi
+
 echo "=============================================="
 echo "    All WASI toolchain tests passed!          "
 echo "=============================================="

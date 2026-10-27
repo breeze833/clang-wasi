@@ -125,7 +125,42 @@ wasmtime run \
 
 ---
 
-### 2. Browser Usage (MemFS / `browser_wasi_shim`)
+### 2. Recommended: Pure JavaScript WasiHost (Zero-Dependency In-Memory VFS)
+
+This repository includes a standalone, production-ready WASI Preview 1 host in `src/wasi-host.js` that directly bridges `clang.wasm`, `lld.wasm`, and user binaries with an in-memory `Map` or Virtual File System (VFS) without needing `memfs.wasm` or third-party shims:
+
+```javascript
+import { WasiHost } from './src/wasi-host.js';
+
+// 1. Prepare in-memory file map
+const vfs = new Map();
+vfs.set('/workspace', { isDir: true });
+vfs.set('/workspace/main.c', new TextEncoder().encode('int main(){ return 0; }'));
+
+// 2. Setup WasiHost for Clang
+const clangHost = new WasiHost({
+  vfs,
+  cwd: '/workspace',
+  argv: ['clang', '-cc1', '-triple', 'wasm32-unknown-wasi', '-emit-obj', '-o', '/workspace/main.o', '/workspace/main.c'],
+  stdout: str => console.log(str),
+  stderr: str => console.error(str),
+});
+
+// 3. Instantiate and run
+let instance;
+clangHost.setMemory(() => instance.exports.memory);
+instance = (await WebAssembly.instantiate(clangModule, clangHost.createImportObject())).instance;
+instance.exports._start();
+
+// Result is directly accessible in JavaScript VFS:
+const objBytes = vfs.get('/workspace/main.o');
+```
+
+See `examples/wasi-host-run.js` for a complete runnable example compiling, linking, and executing C code entirely in memory.
+
+---
+
+### 3. Browser Usage with `browser_wasi_shim`
 
 Mount your virtual file tree, provide the sysroot and headers, and invoke the module directly:
 

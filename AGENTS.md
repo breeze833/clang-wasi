@@ -78,3 +78,20 @@ Testing revealed four specific ABI and structural mismatches between the 2019 `b
 4. **Inode Reallocation Offset Bug on Unlink:**
    * `path_unlink_file` in the 2019 `memfs.wasm` does not reset the buffer write offset on reused inodes.
    * **Consequence:** Re-creating a file after unlinking retains stale write offsets, requiring clumsy truncate-before-unlink workarounds. Native MemFS completely resets inode buffers and file descriptor offsets on deletion and reuse.
+
+---
+
+## 7. Pure JavaScript WasiHost & Direct VFS Architecture
+
+While `memfs.wasm` is provided for C-level POSIX filesystem emulation, this repository also provides `src/wasi-host.js`: a zero-dependency, pure JavaScript WASI Preview 1 host directly backed by an in-memory `Map` or Virtual File System (VFS).
+
+### Advantages over MemFS:
+1. **Zero Double-Buffering:** Files reside directly in JavaScript `Uint8Array` memory; no synchronization or bidirectional mirroring between JavaScript VFS and a secondary Wasm linear memory is needed.
+2. **Unified Architecture:** The same `WasiHost` runs compiler tools (`clang.wasm`, `lld.wasm`) and user-compiled binaries without separate runtimes.
+3. **No 16MB or Inode Table Limits:** File allocation and directory hierarchy scale dynamically with available JavaScript heap.
+4. **Pedagogical and Browser Friendly:** Works identically in Node.js and browser Web Workers (with support for `SharedArrayBuffer` synchronous `Atomics.wait` stdin).
+
+### Reference Scripts:
+- `src/wasi-host.js`: Standalone WASI Preview 1 Host implementation.
+- `examples/wasi-host-run.js`: Standalone runner compiling, linking, and running C code in memory.
+- `scripts/test-wasi-host.js`: Automated verification test suite for C and C++ toolchain operations.
