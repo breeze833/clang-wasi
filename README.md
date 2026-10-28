@@ -97,11 +97,10 @@ Because WASI Preview 1 does not support process spawning (`fork`/`exec`), compil
 wasmtime run \
   --dir=. \
   --dir=/path/to/wasi-sysroot::/sysroot \
-  dist/clang.wasm -- \
+  dist/llvm-box.wasm -- clang \
   --target=wasm32-wasip1 \
   --sysroot=/sysroot \
   -c main.c -o main.o
-
 ```
 
 #### Link object file into a runnable WebAssembly executable:
@@ -111,22 +110,21 @@ wasmtime run \
   --dir=. \
   --dir=/path/to/wasi-sysroot::/sysroot \
   --dir=/path/to/wasi-sysroot/lib/wasi::/builtins \
-  dist/lld.wasm -- \
+  dist/llvm-box.wasm -- wasm-ld \
   -flavor wasm \
   -L/sysroot/lib/wasm32-wasip1 \
   -L/builtins \
   /sysroot/lib/wasm32-wasip1/crt1.o \
   main.o \
-  -lc -lclang_rt.builtins-wasm32 \
+  -lc -lclang_rt.builtins \
   -o main.wasm
-
 ```
 
 ---
 
 ### 2. Recommended: Pure JavaScript WasiHost (Zero-Dependency In-Memory VFS)
 
-This repository includes a standalone, production-ready WASI Preview 1 host in `src/wasi-host.js` that directly bridges `clang.wasm`, `lld.wasm`, and user binaries with an in-memory `Map` or Virtual File System (VFS) without needing `memfs.wasm` or third-party shims:
+This repository includes a standalone, production-ready WASI Preview 1 host in `src/wasi-host.js` that directly bridges `llvm-box.wasm` and user binaries with an in-memory `Map` or Virtual File System (VFS) without needing `memfs.wasm` or third-party shims:
 
 ```javascript
 import { WasiHost } from './src/wasi-host.js';
@@ -148,7 +146,7 @@ const clangHost = new WasiHost({
 // 3. Instantiate and run
 let instance;
 clangHost.setMemory(() => instance.exports.memory);
-instance = (await WebAssembly.instantiate(clangModule, clangHost.createImportObject())).instance;
+instance = (await WebAssembly.instantiate(llvmBoxModule, clangHost.createImportObject())).instance;
 instance.exports._start();
 
 // Result is directly accessible in JavaScript VFS:
@@ -180,7 +178,7 @@ const wasi = new WASI(
 );
 
 const { instance } = await WebAssembly.instantiateStreaming(
-  fetch("clang.wasm"),
+  fetch("llvm-box.wasm"),
   { wasi_snapshot_preview1: wasi.wasiImport }
 );
 

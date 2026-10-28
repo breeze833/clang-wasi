@@ -59,12 +59,18 @@ echo "[+] Standalone sysroot extracted successfully."
 
 # 4. Test toolchain version identification
 echo "=== Step 4: Testing compiler and linker startup ==="
-CLANG_OUT="$(run_wasi "${CLANG_WASM}" -- --version)"
+CLANG_OUT="$(run_wasi "${LLVM_BOX_WASM}" -- clang --version)"
 CLANG_VER="$(echo "${CLANG_OUT}" | head -n 1)"
-echo "[+] Clang Version: ${CLANG_VER}"
-LLD_OUT="$(run_wasi "${LLD_WASM}" -- -flavor wasm --version)"
+echo "[+] Clang Version:   ${CLANG_VER}"
+LLD_OUT="$(run_wasi "${LLVM_BOX_WASM}" -- wasm-ld --version)"
 LLD_VER="$(echo "${LLD_OUT}" | head -n 1)"
-echo "[+] LLD Version:   ${LLD_VER}"
+echo "[+] LLD Version:     ${LLD_VER}"
+AR_OUT="$(run_wasi "${LLVM_BOX_WASM}" -- llvm-ar --version)"
+AR_VER="$(echo "${AR_OUT}" | head -n 2 | tail -n 1 | xargs)"
+echo "[+] LLVM-AR Version: ${AR_VER}"
+NM_OUT="$(run_wasi "${LLVM_BOX_WASM}" -- llvm-nm --version)"
+NM_VER="$(echo "${NM_OUT}" | head -n 1)"
+echo "[+] LLVM-NM:         ${NM_VER}"
 
 # 5. Test C compilation and execution
 echo "=== Step 5: Testing C compilation and execution ==="
@@ -188,9 +194,61 @@ if [ "${CPP_OUTPUT}" != "Hello from WASI C++19!" ]; then
 fi
 echo "[PASS] C++ compilation, linking, and execution verified!"
 
-# 7. Test standalone WasiHost pure JavaScript runner
+# 7. Test utility programs (ar, nm, size, objdump, cxxfilt)
+echo "=== Step 7: Testing utility programs (ar, nm, size, objdump, cxxfilt) ==="
+echo "  -> Archiving with llvm-box (llvm-ar)..."
+run_wasi \
+  --dir="${TEST_TMP}/workspace::/workspace" \
+  "${LLVM_BOX_WASM}" -- llvm-ar rcs /workspace/libhello.a /workspace/hello.o
+
+if [ ! -s "${TEST_TMP}/workspace/libhello.a" ]; then
+  echo "[-] Error: llvm-ar failed to produce libhello.a" >&2
+  exit 1
+fi
+echo "[+] Static archive generated."
+
+echo "  -> Inspecting symbols with llvm-box (llvm-nm)..."
+NM_OUT="$(run_wasi \
+  --dir="${TEST_TMP}/workspace::/workspace" \
+  "${LLVM_BOX_WASM}" -- llvm-nm /workspace/libhello.a)"
+if ! echo "${NM_OUT}" | grep -q "main"; then
+  echo "[-] Error: llvm-nm failed to inspect symbols in libhello.a" >&2
+  exit 1
+fi
+echo "[+] llvm-nm symbol inspection verified."
+
+echo "  -> Inspecting section sizes with llvm-box (llvm-size)..."
+SIZE_OUT="$(run_wasi \
+  --dir="${TEST_TMP}/workspace::/workspace" \
+  "${LLVM_BOX_WASM}" -- llvm-size /workspace/hello.o)"
+if ! echo "${SIZE_OUT}" | grep -q "text"; then
+  echo "[-] Error: llvm-size failed to inspect hello.o" >&2
+  exit 1
+fi
+echo "[+] llvm-size output verified."
+
+echo "  -> Disassembling headers with llvm-box (llvm-objdump)..."
+OBJDUMP_OUT="$(run_wasi \
+  --dir="${TEST_TMP}/workspace::/workspace" \
+  "${LLVM_BOX_WASM}" -- llvm-objdump -h /workspace/hello.o)"
+if ! echo "${OBJDUMP_OUT}" | grep -q "Sections:"; then
+  echo "[-] Error: llvm-objdump failed to inspect hello.o" >&2
+  exit 1
+fi
+echo "[+] llvm-objdump output verified."
+
+echo "  -> Demangling C++ symbols with llvm-box (llvm-cxxfilt)..."
+CXXFILT_OUT="$(run_wasi "${LLVM_BOX_WASM}" -- llvm-cxxfilt _Z3addii)"
+if ! echo "${CXXFILT_OUT}" | grep -q "add(int, int)"; then
+  echo "[-] Error: llvm-cxxfilt failed to demangle symbol" >&2
+  exit 1
+fi
+echo "[+] llvm-cxxfilt demangling verified."
+echo "[PASS] Multicall utility programs verified!"
+
+# 8. Test standalone WasiHost pure JavaScript runner
 if command -v node &> /dev/null; then
-  echo "=== Step 7: Testing standalone WasiHost in-memory VFS runner ==="
+  echo "=== Step 8: Testing standalone WasiHost in-memory VFS runner ==="
   node "${SCRIPT_DIR}/test-wasi-host.js"
 fi
 
