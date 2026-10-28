@@ -134,6 +134,17 @@ export class WasiHost {
       return candidate;
     }
 
+    if (base === '/' && this.cwd && this.cwd !== '/') {
+      const cleanNoWorkspace = clean.startsWith('workspace/') ? clean.substring('workspace/'.length) : clean;
+      const cwdCandidate = normalizePath(`${this.cwd}/${cleanNoWorkspace}`);
+      if (this._vfsExists(cwdCandidate) || this._vfsIsDir(cwdCandidate)) {
+        return cwdCandidate;
+      }
+      if (!clean.startsWith('include/') && !clean.startsWith('lib/') && !clean.startsWith('usr/') && !clean.startsWith('bin/')) {
+        return cwdCandidate;
+      }
+    }
+
     if (clean.startsWith('include/') || clean.startsWith('lib/') || clean.startsWith('usr/') || clean.startsWith('bin/')) {
       const rootCandidate = normalizePath(`/${clean}`);
       if (this._vfsExists(rootCandidate) || this._vfsIsDir(rootCandidate)) {

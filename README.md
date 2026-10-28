@@ -36,6 +36,7 @@ clang-wasi/
 ├── dist/                       # Build output artifacts (generated)
 │   ├── clang.wasm              # Clang compiler WebAssembly module
 │   ├── lld.wasm                # LLD linker WebAssembly module
+│   ├── llvm-box.wasm           # Multicall utilities (ar, nm, objdump, size, cxxfilt, strings)
 │   └── sysroot.tar.gz          # Standalone C/C++ sysroot archive
 ├── AGENTS.md                   # Development rules and platform constraints
 └── README.md

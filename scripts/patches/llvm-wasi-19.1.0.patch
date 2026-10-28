@@ -266,10 +266,10 @@ index ea040ccf2..c754136d7 100644
    if (getHostID(StoredHostID))
      return true; // Conservatively assume it's executing on error.
 diff --git a/llvm/lib/Support/Signals.cpp b/llvm/lib/Support/Signals.cpp
-index 9f9030e79..ec5a18370 100644
+index 9f9030e79..33277e6c5 100644
 --- a/llvm/lib/Support/Signals.cpp
 +++ b/llvm/lib/Support/Signals.cpp
-@@ -273,9 +273,19 @@ static bool printMarkupStackTrace(StringRef Argv0, void **StackTrace, int Depth,
+@@ -273,9 +273,26 @@ static bool printMarkupStackTrace(StringRef Argv0, void **StackTrace, int Depth,
  }
  
  // Include the platform-specific parts of this class.
@@ -285,6 +285,13 @@ index 9f9030e79..ec5a18370 100644
 +}
 +void llvm::sys::DontRemoveFileOnSignal(StringRef Filename) {}
 +void llvm::sys::DisableSystemDialogsOnCrash() {}
++void llvm::sys::PrintStackTraceOnErrorSignal(StringRef Argv0,
++                                             bool DisableCrashReporting) {}
++void llvm::sys::SetInterruptFunction(void (*IF)()) {}
++void llvm::sys::SetInfoSignalFunction(void (*Handler)()) {}
++void llvm::sys::SetOneShotPipeSignalFunction(void (*Handler)()) {}
++void llvm::sys::DefaultOneShotPipeSignalHandler() {}
++void llvm::sys::unregisterHandlers() {}
 +#elif defined(LLVM_ON_UNIX)
  #include "Unix/Signals.inc"
 -#endif

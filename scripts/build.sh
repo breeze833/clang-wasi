@@ -81,13 +81,14 @@ if [ ! -f "build-wasi/build.ninja" ]; then
     -DLLVM_INCLUDE_EXAMPLES=OFF \
     -DLLVM_INCLUDE_BENCHMARKS=OFF \
     -DLLVM_BUILD_STATIC=ON \
+    -DLLVM_TOOL_LLVM_DRIVER_BUILD=ON \
     -DCMAKE_C_FLAGS="-D_WASI_EMULATED_MMAN -D_WASI_EMULATED_PROCESS_CLOCKS -D_WASI_EMULATED_GETPID" \
     -DCMAKE_CXX_FLAGS="-D_WASI_EMULATED_MMAN -D_WASI_EMULATED_PROCESS_CLOCKS -D_WASI_EMULATED_GETPID" \
     -DCMAKE_EXE_LINKER_FLAGS="-Wl,--stack-first -Wl,-z,stack-size=16777216 -Wl,--initial-memory=67108864 -lwasi-emulated-mman -lwasi-emulated-process-clocks -lwasi-emulated-getpid"
 fi
 
-echo "Building WASI targets (clang, lld)..."
-ninja -C build-wasi clang lld
+echo "Building WASI targets (clang, lld, llvm-driver)..."
+ninja -C build-wasi clang lld llvm-driver
 
 echo "=== 5. Post-processing Binaries & Packaging ==="
 mkdir -p dist
@@ -120,6 +121,8 @@ process_binary() {
 
 process_binary "build-wasi/bin/clang" "dist/clang.wasm" "clang"
 process_binary "build-wasi/bin/lld" "dist/lld.wasm" "lld"
+process_binary "build-wasi/bin/llvm" "dist/llvm-box.wasm" "llvm-box"
+
 
 # Assemble complete sysroot.tar.gz (headers, static libraries, and compiler builtins)
 SYSROOT_ARCHIVE="dist/sysroot.tar.gz"
@@ -207,6 +210,7 @@ TAR_FILE="clang-wasi-19.tar.gz"
 if [ ! -f "${TAR_FILE}" ] || \
    [ "dist/clang.wasm" -nt "${TAR_FILE}" ] || \
    [ "dist/lld.wasm" -nt "${TAR_FILE}" ] || \
+   [ "dist/llvm-box.wasm" -nt "${TAR_FILE}" ] || \
    [ "${SYSROOT_ARCHIVE}" -nt "${TAR_FILE}" ]; then
   echo "Packaging distribution archive ${TAR_FILE}..."
   rm -f "${TAR_FILE}.tmp"

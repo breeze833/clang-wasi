@@ -42,6 +42,7 @@ The build pipeline consists of two stages followed by community-compatible packa
 3. **Packaging (`dist/`):** Outputs the release toolchain:
    - `clang.wasm`: Clang compiler optimized via `wasm-opt -O2`.
    - `lld.wasm`: LLD linker optimized via `wasm-opt -O2`.
+   - `llvm-box.wasm`: Multicall driver binary containing `llvm-ar`, `llvm-nm`, `llvm-objdump`, `llvm-size`, `llvm-cxxfilt`, and `llvm-strings` optimized via `wasm-opt -O2`.
    - `sysroot.tar.gz`: Complete standalone sysroot archive containing standard C/C++ headers (`stdio.h`, `<vector>`), static libraries (`libc.a`, `libc++.a`, `crt1.o`), and Clang runtime builtins (`libclang_rt.builtins.a`).
 4. **Distribution Archive (`clang-wasi-19.tar.gz`):** Bundles the toolchain components into a compressed release tarball.
 

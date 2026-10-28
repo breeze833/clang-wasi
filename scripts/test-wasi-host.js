@@ -98,10 +98,11 @@ async function main() {
   const distDir = path.join(rootDir, 'dist');
   const clangWasmPath = path.join(distDir, 'clang.wasm');
   const lldWasmPath = path.join(distDir, 'lld.wasm');
+  const llvmBoxWasmPath = path.join(distDir, 'llvm-box.wasm');
   const sysrootGzPath = path.join(distDir, 'sysroot.tar.gz');
 
-  if (!fs.existsSync(clangWasmPath) || !fs.existsSync(lldWasmPath) || !fs.existsSync(sysrootGzPath)) {
-    console.error('Error: Missing required dist files (clang.wasm, lld.wasm, sysroot.tar.gz).');
+  if (!fs.existsSync(clangWasmPath) || !fs.existsSync(lldWasmPath) || !fs.existsSync(llvmBoxWasmPath) || !fs.existsSync(sysrootGzPath)) {
+    console.error('Error: Missing required dist files (clang.wasm, lld.wasm, llvm-box.wasm, sysroot.tar.gz).');
     process.exit(1);
   }
 
@@ -372,6 +373,91 @@ int main() {
     process.exit(1);
   }
   console.log('[PASS] C++ compilation, linking, and execution with WasiHost verified!');
+
+  // 5. Test llvm-box multicall tools (ar, nm, size, objdump, cxxfilt)
+  console.log('5. Testing llvm-box.wasm multicall utilities...');
+  const llvmBoxModule = await WebAssembly.compile(fs.readFileSync(llvmBoxWasmPath));
+
+  // ar rcs libhello.a hello.o
+  let arOutput = '';
+  const arHost = new WasiHost({
+    vfs,
+    cwd: '/workspace',
+    argv: ['ar', 'rcs', 'libhello.a', 'hello.o'],
+    stdout: s => { arOutput += s; },
+    stderr: s => { arOutput += s; },
+  });
+  const arCode = await runInstance(llvmBoxModule, arHost);
+  if (arCode !== 0 || !vfs.has('/workspace/libhello.a')) {
+    console.error('[-] ar rcs failed. Code:', arCode, 'Output:', arOutput);
+    process.exit(1);
+  }
+  console.log('[+] ar rcs succeeded -> /workspace/libhello.a');
+
+  // nm libhello.a
+  let nmOutput = '';
+  const nmHost = new WasiHost({
+    vfs,
+    cwd: '/workspace',
+    argv: ['nm', 'libhello.a'],
+    stdout: s => { nmOutput += s; },
+    stderr: s => { nmOutput += s; },
+  });
+  const nmCode = await runInstance(llvmBoxModule, nmHost);
+  if (nmCode !== 0 || !nmOutput.includes('main')) {
+    console.error('[-] nm failed. Code:', nmCode, 'Output:', nmOutput);
+    process.exit(1);
+  }
+  console.log('[+] nm succeeded, symbol "main" detected.');
+
+  // size hello.o
+  let sizeOutput = '';
+  const sizeHost = new WasiHost({
+    vfs,
+    cwd: '/workspace',
+    argv: ['size', 'hello.o'],
+    stdout: s => { sizeOutput += s; },
+    stderr: s => { sizeOutput += s; },
+  });
+  const sizeCode = await runInstance(llvmBoxModule, sizeHost);
+  if (sizeCode !== 0 || !sizeOutput.includes('text')) {
+    console.error('[-] size failed. Code:', sizeCode, 'Output:', sizeOutput);
+    process.exit(1);
+  }
+  console.log('[+] size succeeded, section headers detected.');
+
+  // objdump -h hello.o
+  let objdumpOutput = '';
+  const objdumpHost = new WasiHost({
+    vfs,
+    cwd: '/workspace',
+    argv: ['objdump', '-h', 'hello.o'],
+    stdout: s => { objdumpOutput += s; },
+    stderr: s => { objdumpOutput += s; },
+  });
+  const objdumpCode = await runInstance(llvmBoxModule, objdumpHost);
+  if (objdumpCode !== 0 || !objdumpOutput.includes('Sections:')) {
+    console.error('[-] objdump failed. Code:', objdumpCode, 'Output:', objdumpOutput);
+    process.exit(1);
+  }
+  console.log('[+] objdump succeeded, sections table detected.');
+
+  // cxxfilt _Z3addii
+  let cxxfiltOutput = '';
+  const cxxfiltHost = new WasiHost({
+    vfs,
+    cwd: '/workspace',
+    argv: ['cxxfilt', '_Z3addii'],
+    stdout: s => { cxxfiltOutput += s; },
+    stderr: s => { cxxfiltOutput += s; },
+  });
+  const cxxfiltCode = await runInstance(llvmBoxModule, cxxfiltHost);
+  if (cxxfiltCode !== 0 || !cxxfiltOutput.includes('add(int, int)')) {
+    console.error('[-] cxxfilt failed. Code:', cxxfiltCode, 'Output:', cxxfiltOutput);
+    process.exit(1);
+  }
+  console.log('[+] cxxfilt succeeded: _Z3addii -> add(int, int)');
+  console.log('[PASS] llvm-box.wasm multicall tools verified!');
 
   console.log('======================================================');
   console.log('   All WasiHost standalone tests PASSED successfully! ');
