@@ -60,6 +60,7 @@ jobs:
           path: |
             dist/clang.wasm
             dist/lld.wasm
+            dist/llvm-box.wasm
             dist/sysroot.tar.gz
             clang-wasi-19.tar.gz
           if-no-files-found: error
@@ -88,6 +89,7 @@ jobs:
           files: |
             dist/clang.wasm
             dist/lld.wasm
+            dist/llvm-box.wasm
             dist/sysroot.tar.gz
             clang-wasi-19.tar.gz
         env:
