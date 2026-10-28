@@ -5,7 +5,7 @@
  *
  * Requirements:
  *   - Node.js (>= 18)
- *   - Release assets in dist/ (clang.wasm, lld.wasm, sysroot.tar.gz)
+ *   - Release assets in dist/ (llvm-box.wasm, sysroot.tar.gz)
  *
  * Usage:
  *   node examples/wasi-host-run.js
@@ -117,9 +117,11 @@ int main(void) {
   vfs.set('/workspace/main.c', Buffer.from(sourceCode));
   console.log('Created /workspace/main.c in VFS.');
 
-  // 4. Compile with clang.wasm
-  console.log('Compiling main.c with clang.wasm...');
-  const clangModule = await WebAssembly.compile(fs.readFileSync(path.join(distDir, 'clang.wasm')));
+  // 4. Compile and link with llvm-box.wasm
+  console.log('Loading llvm-box.wasm...');
+  const llvmBoxModule = await WebAssembly.compile(fs.readFileSync(path.join(distDir, 'llvm-box.wasm')));
+
+  console.log('Compiling main.c with llvm-box (clang)...');
   const clangHost = new WasiHost({
     vfs,
     cwd: '/workspace',
@@ -136,13 +138,12 @@ int main(void) {
     stdout: s => process.stdout.write(s),
     stderr: s => process.stderr.write(s),
   });
-  const clangExit = await runWasm(clangModule, clangHost);
+  const clangExit = await runWasm(llvmBoxModule, clangHost);
   if (clangExit !== 0) throw new Error(`Compilation failed with code ${clangExit}`);
   console.log('[+] Generated /workspace/main.o');
 
-  // 5. Link with lld.wasm
-  console.log('Linking main.o with lld.wasm...');
-  const lldModule = await WebAssembly.compile(fs.readFileSync(path.join(distDir, 'lld.wasm')));
+  // 5. Link with llvm-box (wasm-ld)
+  console.log('Linking main.o with llvm-box (wasm-ld)...');
   const lldHost = new WasiHost({
     vfs,
     cwd: '/workspace',
@@ -159,7 +160,7 @@ int main(void) {
     stdout: s => process.stdout.write(s),
     stderr: s => process.stderr.write(s),
   });
-  const lldExit = await runWasm(lldModule, lldHost);
+  const lldExit = await runWasm(llvmBoxModule, lldHost);
   if (lldExit !== 0) throw new Error(`Linking failed with code ${lldExit}`);
   console.log('[+] Generated /workspace/main.wasm');
 

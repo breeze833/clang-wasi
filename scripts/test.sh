@@ -6,8 +6,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 DIST_DIR="${REPO_ROOT}/dist"
-CLANG_WASM="${DIST_DIR}/clang.wasm"
-LLD_WASM="${DIST_DIR}/lld.wasm"
 LLVM_BOX_WASM="${DIST_DIR}/llvm-box.wasm"
 SYSROOT_ARCHIVE="${DIST_DIR}/sysroot.tar.gz"
 
@@ -18,7 +16,7 @@ echo "=============================================="
 # 1. Validate distribution artifacts
 echo "=== Step 1: Checking release artifacts in ${DIST_DIR} ==="
 MISSING=0
-for f in "${CLANG_WASM}" "${LLD_WASM}" "${LLVM_BOX_WASM}" "${SYSROOT_ARCHIVE}"; do
+for f in "${LLVM_BOX_WASM}" "${SYSROOT_ARCHIVE}"; do
   if [ ! -f "${f}" ]; then
     echo "[-] Missing artifact: ${f}" >&2
     MISSING=1
@@ -79,11 +77,11 @@ int main(void) {
 }
 EOF
 
-echo "  -> Compiling hello.c with clang.wasm..."
+echo "  -> Compiling hello.c with llvm-box (clang)..."
 run_wasi \
   --dir="${TEST_TMP}/workspace::/workspace" \
   --dir="${TEST_TMP}/sysroot::/sysroot" \
-  "${CLANG_WASM}" -- \
+  "${LLVM_BOX_WASM}" -- clang \
   --target=wasm32-wasip1 \
   --sysroot=/sysroot \
   -resource-dir=/sysroot/lib/clang/19 \
@@ -96,11 +94,11 @@ if [ ! -s "${TEST_TMP}/workspace/hello.o" ]; then
 fi
 echo "[+] C object file generated."
 
-echo "  -> Linking hello.o with lld.wasm..."
+echo "  -> Linking hello.o with llvm-box (wasm-ld)..."
 run_wasi \
   --dir="${TEST_TMP}/workspace::/workspace" \
   --dir="${TEST_TMP}/sysroot::/sysroot" \
-  "${LLD_WASM}" -- \
+  "${LLVM_BOX_WASM}" -- wasm-ld \
   -flavor wasm \
   /sysroot/lib/wasm32-wasip1/crt1.o \
   /workspace/hello.o \
@@ -141,11 +139,11 @@ int main() {
 }
 EOF
 
-echo "  -> Compiling hello.cpp with clang.wasm..."
+echo "  -> Compiling hello.cpp with llvm-box (clang++)..."
 run_wasi \
   --dir="${TEST_TMP}/workspace::/workspace" \
   --dir="${TEST_TMP}/sysroot::/sysroot" \
-  "${CLANG_WASM}" -- \
+  "${LLVM_BOX_WASM}" -- clang++ \
   --target=wasm32-wasip1 \
   --sysroot=/sysroot \
   -resource-dir=/sysroot/lib/clang/19 \
@@ -159,11 +157,11 @@ if [ ! -s "${TEST_TMP}/workspace/hello_cpp.o" ]; then
 fi
 echo "[+] C++ object file generated."
 
-echo "  -> Linking hello_cpp.o with lld.wasm..."
+echo "  -> Linking hello_cpp.o with llvm-box (wasm-ld)..."
 run_wasi \
   --dir="${TEST_TMP}/workspace::/workspace" \
   --dir="${TEST_TMP}/sysroot::/sysroot" \
-  "${LLD_WASM}" -- \
+  "${LLVM_BOX_WASM}" -- wasm-ld \
   -flavor wasm \
   /sysroot/lib/wasm32-wasip1/crt1.o \
   /workspace/hello_cpp.o \

@@ -38,11 +38,9 @@ When developing, debugging, or building this project, autonomous agents must adh
 
 The build pipeline consists of two stages followed by community-compatible packaging:
 1. **Stage 1 (Host Build):** Compiles host utilities `llvm-tblgen` and `clang-tblgen` natively inside `build-native/`.
-2. **Stage 2 (WASI Cross-compilation):** Cross-compiles `clang` and `lld` using `wasi-sdk-p1.cmake` inside `build-wasi/`.
+2. **Stage 2 (WASI Cross-compilation):** Cross-compiles `llvm-driver` using `wasi-sdk-p1.cmake` inside `build-wasi/`.
 3. **Packaging (`dist/`):** Outputs the release toolchain:
-   - `clang.wasm`: Clang compiler optimized via `wasm-opt -O2`.
-   - `lld.wasm`: LLD linker optimized via `wasm-opt -O2`.
-   - `llvm-box.wasm`: Multicall driver binary containing `llvm-ar`, `llvm-nm`, `llvm-objdump`, `llvm-size`, `llvm-cxxfilt`, and `llvm-strings` optimized via `wasm-opt -O2`.
+   - `llvm-box.wasm`: Single unified multicall driver binary containing `clang`, `clang++`, `clang-cpp`, `wasm-ld`, `lld`, `llvm-ar`, `llvm-nm`, `llvm-objdump`, `llvm-size`, `llvm-cxxfilt`, and `llvm-strings` optimized via `wasm-opt -O2`.
    - `sysroot.tar.gz`: Complete standalone sysroot archive containing standard C/C++ headers (`stdio.h`, `<vector>`), static libraries (`libc.a`, `libc++.a`, `crt1.o`), and Clang runtime builtins (`libclang_rt.builtins.a`).
 4. **Distribution Archive (`clang-wasi-19.tar.gz`):** Bundles the toolchain components into a compressed release tarball.
 
@@ -63,7 +61,7 @@ This repository eliminates `memfs.wasm` entirely in favor of `src/wasi-host.js`:
 
 ### Advantages over MemFS:
 1. **Zero Double-Buffering:** Files reside directly in JavaScript `Uint8Array` memory; no synchronization or bidirectional mirroring between JavaScript VFS and a secondary Wasm linear memory is needed.
-2. **Unified Architecture:** The same `WasiHost` runs compiler tools (`clang.wasm`, `lld.wasm`) and user-compiled binaries without separate runtimes.
+2. **Unified Architecture:** The same `WasiHost` runs compiler tools (`llvm-box.wasm`) and user-compiled binaries without separate runtimes.
 3. **No 16MB or Inode Table Limits:** File allocation and directory hierarchy scale dynamically with available JavaScript heap.
 4. **Pedagogical and Browser Friendly:** Works identically in Node.js and browser Web Workers (with support for `SharedArrayBuffer` synchronous `Atomics.wait` stdin).
 

@@ -96,13 +96,11 @@ async function main() {
 
   const rootDir = path.resolve(__dirname, '..');
   const distDir = path.join(rootDir, 'dist');
-  const clangWasmPath = path.join(distDir, 'clang.wasm');
-  const lldWasmPath = path.join(distDir, 'lld.wasm');
   const llvmBoxWasmPath = path.join(distDir, 'llvm-box.wasm');
   const sysrootGzPath = path.join(distDir, 'sysroot.tar.gz');
 
-  if (!fs.existsSync(clangWasmPath) || !fs.existsSync(lldWasmPath) || !fs.existsSync(llvmBoxWasmPath) || !fs.existsSync(sysrootGzPath)) {
-    console.error('Error: Missing required dist files (clang.wasm, lld.wasm, llvm-box.wasm, sysroot.tar.gz).');
+  if (!fs.existsSync(llvmBoxWasmPath) || !fs.existsSync(sysrootGzPath)) {
+    console.error('Error: Missing required dist files (llvm-box.wasm, sysroot.tar.gz).');
     process.exit(1);
   }
 
@@ -157,10 +155,9 @@ async function main() {
   console.log(`[+] Sysroot loaded: ${vfs.size} VFS entries.`);
 
   // 2. Compile modules
-  console.log('2. Compiling clang.wasm and lld.wasm WebAssembly modules...');
-  const clangModule = await WebAssembly.compile(fs.readFileSync(clangWasmPath));
-  const lldModule = await WebAssembly.compile(fs.readFileSync(lldWasmPath));
-  console.log('[+] Modules compiled.');
+  console.log('2. Compiling llvm-box.wasm WebAssembly module...');
+  const llvmBoxModule = await WebAssembly.compile(fs.readFileSync(llvmBoxWasmPath));
+  console.log('[+] Module compiled.');
 
   // 3. Test C compilation and execution
   console.log('3. Testing C compilation, linking, and execution...');
@@ -203,7 +200,7 @@ int main(void) {
     stderr: s => { compilerOutput += s; },
   });
 
-  const clangCode = await runInstance(clangModule, clangHost);
+  const clangCode = await runInstance(llvmBoxModule, clangHost);
   if (clangCode !== 0 || !vfs.has('/workspace/hello.o')) {
     console.error('[-] C compilation failed. Code:', clangCode);
     console.error(compilerOutput);
@@ -234,7 +231,7 @@ int main(void) {
     stderr: s => { linkerOutput += s; },
   });
 
-  const lldCode = await runInstance(lldModule, lldHost);
+  const lldCode = await runInstance(llvmBoxModule, lldHost);
   if (lldCode !== 0 || !vfs.has('/workspace/hello.wasm')) {
     console.error('[-] C linking failed. Code:', lldCode);
     console.error(linkerOutput);
@@ -312,7 +309,7 @@ int main() {
     stderr: s => { cppCompilerOutput += s; },
   });
 
-  const clangCppCode = await runInstance(clangModule, clangCppHost);
+  const clangCppCode = await runInstance(llvmBoxModule, clangCppHost);
   if (clangCppCode !== 0 || !vfs.has('/workspace/hello_cpp.o')) {
     console.error('[-] C++ compilation failed. Code:', clangCppCode);
     console.error(cppCompilerOutput);
@@ -345,7 +342,7 @@ int main() {
     stderr: s => { cppLinkerOutput += s; },
   });
 
-  const lldCppCode = await runInstance(lldModule, lldCppHost);
+  const lldCppCode = await runInstance(llvmBoxModule, lldCppHost);
   if (lldCppCode !== 0 || !vfs.has('/workspace/hello_cpp.wasm')) {
     console.error('[-] C++ linking failed. Code:', lldCppCode);
     console.error(cppLinkerOutput);
@@ -376,7 +373,6 @@ int main() {
 
   // 5. Test llvm-box multicall tools (ar, nm, size, objdump, cxxfilt)
   console.log('5. Testing llvm-box.wasm multicall utilities...');
-  const llvmBoxModule = await WebAssembly.compile(fs.readFileSync(llvmBoxWasmPath));
 
   // ar rcs libhello.a hello.o
   let arOutput = '';

@@ -87,8 +87,8 @@ if [ ! -f "build-wasi/build.ninja" ]; then
     -DCMAKE_EXE_LINKER_FLAGS="-Wl,--stack-first -Wl,-z,stack-size=16777216 -Wl,--initial-memory=67108864 -lwasi-emulated-mman -lwasi-emulated-process-clocks -lwasi-emulated-getpid"
 fi
 
-echo "Building WASI targets (clang, lld, llvm-driver)..."
-ninja -C build-wasi clang lld llvm-driver
+echo "Building WASI target (llvm-driver)..."
+ninja -C build-wasi llvm-driver
 
 echo "=== 5. Post-processing Binaries & Packaging ==="
 mkdir -p dist
@@ -119,8 +119,6 @@ process_binary() {
   fi
 }
 
-process_binary "build-wasi/bin/clang" "dist/clang.wasm" "clang"
-process_binary "build-wasi/bin/lld" "dist/lld.wasm" "lld"
 process_binary "build-wasi/bin/llvm" "dist/llvm-box.wasm" "llvm-box"
 
 
@@ -208,8 +206,6 @@ chmod 644 dist/*
 
 TAR_FILE="clang-wasi-19.tar.gz"
 if [ ! -f "${TAR_FILE}" ] || \
-   [ "dist/clang.wasm" -nt "${TAR_FILE}" ] || \
-   [ "dist/lld.wasm" -nt "${TAR_FILE}" ] || \
    [ "dist/llvm-box.wasm" -nt "${TAR_FILE}" ] || \
    [ "${SYSROOT_ARCHIVE}" -nt "${TAR_FILE}" ]; then
   echo "Packaging distribution archive ${TAR_FILE}..."

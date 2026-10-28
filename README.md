@@ -34,9 +34,7 @@ clang-wasi/
 ├── examples/
 │   └── wasi-host-run.js        # Standalone in-memory C compilation & execution example
 ├── dist/                       # Build output artifacts (generated)
-│   ├── clang.wasm              # Clang compiler WebAssembly module
-│   ├── lld.wasm                # LLD linker WebAssembly module
-│   ├── llvm-box.wasm           # Multicall utilities (ar, nm, objdump, size, cxxfilt, strings)
+│   ├── llvm-box.wasm           # Single multicall binary (clang, clang++, wasm-ld, ar, nm, etc.)
 │   └── sysroot.tar.gz          # Standalone C/C++ sysroot archive
 ├── AGENTS.md                   # Development rules and platform constraints
 └── README.md
@@ -80,10 +78,10 @@ chmod +x scripts/build.sh
 1. Downloads and extracts the matching `wasi-sdk` sysroot and toolchain.
 2. Clones the specified LLVM release tag (`llvmorg-19.1.0`) with `--depth 1` and applies WASI platform patches.
 3. **Stage 1:** Compiles native host TableGen utilities (`llvm-tblgen`, `clang-tblgen`).
-4. **Stage 2:** Cross-compiles `clang` and `lld` using `wasi-sdk-p1.cmake` for `wasm32-wasip1`.
-5. Strips and optimizes `clang.wasm` and `lld.wasm` with `wasm-opt -O2`.
+4. **Stage 2:** Cross-compiles `llvm-driver` using `wasi-sdk-p1.cmake` for `wasm32-wasip1`.
+5. Strips and optimizes `llvm-box.wasm` with `wasm-opt -O2`.
 6. Assembles the standalone C/C++ sysroot archive (`dist/sysroot.tar.gz`).
-7. Packages all components (`clang.wasm`, `lld.wasm`, `sysroot.tar.gz`) into `clang-wasi-19.tar.gz`.
+7. Packages components (`llvm-box.wasm`, `sysroot.tar.gz`) into `clang-wasi-19.tar.gz`.
 
 ---
 
@@ -209,7 +207,7 @@ This repository eliminates `memfs.wasm` entirely in favor of **`src/wasi-host.js
 Releases are automated via GitHub Actions:
 
 * Pushing a version tag matching `v*` (e.g., `git tag v19.1.0 && git push origin v19.1.0`) triggers `.github/workflows/build-release.yml`.
-* The workflow compiles all modules in a clean runner and uploads the release artifacts (`clang.wasm`, `lld.wasm`, `sysroot.tar.gz`, and `clang-wasi-19.tar.gz`) to GitHub Releases.
+* The workflow compiles all modules in a clean runner and uploads the release artifacts (`llvm-box.wasm`, `sysroot.tar.gz`, and `clang-wasi-19.tar.gz`) to GitHub Releases.
 
 ---
 

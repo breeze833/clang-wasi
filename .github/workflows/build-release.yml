@@ -58,8 +58,6 @@ jobs:
         with:
           name: clang-wasi-artifacts
           path: |
-            dist/clang.wasm
-            dist/lld.wasm
             dist/llvm-box.wasm
             dist/sysroot.tar.gz
             clang-wasi-19.tar.gz
@@ -87,8 +85,6 @@ jobs:
           draft: ${{ inputs.draft || false }}
           prerelease: ${{ inputs.prerelease || false }}
           files: |
-            dist/clang.wasm
-            dist/lld.wasm
             dist/llvm-box.wasm
             dist/sysroot.tar.gz
             clang-wasi-19.tar.gz
