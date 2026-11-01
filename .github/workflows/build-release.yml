@@ -60,6 +60,7 @@ jobs:
           path: |
             dist/llvm-box.wasm
             dist/sysroot.tar.gz
+            dist/wasi-host.js
             clang-wasi-19.tar.gz
           if-no-files-found: error
 
@@ -87,6 +88,7 @@ jobs:
           files: |
             dist/llvm-box.wasm
             dist/sysroot.tar.gz
+            dist/wasi-host.js
             clang-wasi-19.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

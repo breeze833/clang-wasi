@@ -200,6 +200,9 @@ fi
 rm -rf dist/lib
 rm -f dist/sysroot.tar
 
+# Copy standalone WasiHost runtime into dist
+cp src/wasi-host.js dist/wasi-host.js
+
 # Enforce uniform directory and file permissions
 chmod 755 dist
 chmod 644 dist/*
