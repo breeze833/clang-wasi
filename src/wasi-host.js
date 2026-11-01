@@ -65,6 +65,7 @@ export class WasiHost {
     this.inodes = new Map();
     this.nextInode = 100n;
     this.createdDirs = new Set(['/', '/workspace', '/usr', '/bin', '/usr/include', '/usr/lib', '/include', '/lib']);
+    this.textDecoder = new TextDecoder('utf-8', { fatal: false });
   }
 
   _getInode(p) {
@@ -99,14 +100,16 @@ export class WasiHost {
     return new BigInt64Array(this.mem().buffer);
   }
 
-  readStr(offset, len) {
+  readStr(offset, len = -1) {
     const u8 = this.memU8();
-    let str = '';
-    const end = len !== -1 ? offset + len : u8.length;
-    for (let i = offset; i < end && u8[i] !== 0; ++i) {
-      str += String.fromCharCode(u8[i]);
+    if (len !== -1 && len !== undefined) {
+      return this.textDecoder.decode(u8.subarray(offset, offset + len));
     }
-    return str;
+    let end = offset;
+    while (end < u8.length && u8[end] !== 0) {
+      end++;
+    }
+    return this.textDecoder.decode(u8.subarray(offset, end));
   }
 
   resolvePath(dirfd, pathStr) {
@@ -895,7 +898,72 @@ export class WasiHost {
         return ESUCCESS;
       },
 
-      poll_oneoff: () => ESUCCESS,
+      poll_oneoff: (in_ptr, out_ptr, nsubscriptions, nevents_out) => {
+        const mem = this.mem();
+        const view = new DataView(mem.buffer);
+        let nevents = 0;
+        let maxSleepMs = 0;
+
+        for (let i = 0; i < nsubscriptions; i++) {
+          const subPtr = in_ptr + i * 48;
+          const userdata = view.getBigUint64(subPtr, true);
+          const tag = view.getUint8(subPtr + 8);
+
+          if (tag === 0) {
+            // __WASI_EVENTTYPE_CLOCK (0)
+            const timeout = view.getBigUint64(subPtr + 24, true);
+            const flags = view.getUint16(subPtr + 40, true);
+
+            let waitMs = 0;
+            if ((flags & 1) !== 0) {
+              // __WASI_SUBCLOCKFLAGS_SUBSCRIPTION_CLOCK_ABSTIME (1)
+              const nowNs = BigInt(Date.now()) * 1000000n;
+              if (timeout > nowNs) {
+                waitMs = Number((timeout - nowNs) / 1000000n);
+              }
+            } else {
+              // Relative timeout in nanoseconds
+              waitMs = Number(timeout / 1000000n);
+            }
+            if (waitMs > maxSleepMs) maxSleepMs = waitMs;
+
+            const evtPtr = out_ptr + nevents * 32;
+            view.setBigUint64(evtPtr, userdata, true);
+            view.setUint16(evtPtr + 8, 0, true); // error: ESUCCESS
+            view.setUint8(evtPtr + 10, 0); // type: __WASI_EVENTTYPE_CLOCK
+            nevents++;
+          } else {
+            // For fd_read / fd_write, immediately report ready with ESUCCESS
+            const evtPtr = out_ptr + nevents * 32;
+            view.setBigUint64(evtPtr, userdata, true);
+            view.setUint16(evtPtr + 8, 0, true);
+            view.setUint8(evtPtr + 10, tag);
+            nevents++;
+          }
+        }
+
+        if (maxSleepMs > 0) {
+          if (!this._sleepSyncBuffer && typeof SharedArrayBuffer !== 'undefined') {
+            try {
+              this._sleepSyncBuffer = new Int32Array(new SharedArrayBuffer(4));
+            } catch (_) {}
+          }
+          if (this._sleepSyncBuffer) {
+            try {
+              Atomics.wait(this._sleepSyncBuffer, 0, 0, Math.max(1, Math.min(maxSleepMs, 60000)));
+            } catch (_) {
+              const start = Date.now();
+              while (Date.now() - start < maxSleepMs) {}
+            }
+          } else {
+            const start = Date.now();
+            while (Date.now() - start < maxSleepMs) {}
+          }
+        }
+
+        this.memU32()[nevents_out >> 2] = nevents;
+        return ESUCCESS;
+      },
       sched_yield: () => ESUCCESS,
     };
 

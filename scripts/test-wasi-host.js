@@ -455,6 +455,46 @@ int main() {
   console.log('[+] cxxfilt succeeded: _Z3addii -> add(int, int)');
   console.log('[PASS] llvm-box.wasm multicall tools verified!');
 
+  // 6. Test WasiHost UTF-8 decoding and poll_oneoff clock delay
+  console.log('6. Testing WasiHost UTF-8 decoding and poll_oneoff...');
+  const testHost = new WasiHost({ vfs, cwd: '/workspace' });
+  const testBuf = new Uint8Array(1024);
+  testHost.setMemory(() => testBuf);
+  const imports = testHost.createImportObject();
+  const encoder = new TextEncoder();
+  const encoded = encoder.encode('Hello, 世界! ┌─┐\0');
+  testBuf.set(encoded, 100);
+  const decoded = testHost.readStr(100);
+  if (decoded !== 'Hello, 世界! ┌─┐') {
+    console.error('[-] UTF-8 decode failed:', decoded);
+    process.exit(1);
+  }
+  console.log('[+] UTF-8 decode succeeded:', decoded);
+
+  const view = new DataView(testBuf.buffer);
+  const inPtr = 200;
+  const outPtr = 300;
+  const neventsOutPtr = 400;
+
+  view.setBigUint64(inPtr, 12345n, true);
+  view.setUint8(inPtr + 8, 0); // __WASI_EVENTTYPE_CLOCK
+  view.setBigUint64(inPtr + 24, 15000000n, true); // 15ms in ns
+  view.setUint16(inPtr + 40, 0, true); // relative
+
+  const startClock = Date.now();
+  const pollRes = imports.wasi_snapshot_preview1.poll_oneoff(inPtr, outPtr, 1, neventsOutPtr);
+  const elapsed = Date.now() - startClock;
+  const neventsReported = view.getUint32(neventsOutPtr, true);
+  const outUserdata = view.getBigUint64(outPtr, true);
+  const outError = view.getUint16(outPtr + 8, true);
+
+  if (pollRes !== 0 || neventsReported !== 1 || outUserdata !== 12345n || outError !== 0 || elapsed < 5) {
+    console.error('[-] poll_oneoff test failed:', { pollRes, neventsReported, outUserdata, outError, elapsed });
+    process.exit(1);
+  }
+  console.log(`[+] poll_oneoff clock delay succeeded (${elapsed}ms elapsed).`);
+  console.log('[PASS] WasiHost UTF-8 and clock delay verified!');
+
   console.log('======================================================');
   console.log('   All WasiHost standalone tests PASSED successfully! ');
   console.log('======================================================');
