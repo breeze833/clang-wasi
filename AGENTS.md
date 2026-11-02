@@ -6,7 +6,13 @@ When developing, debugging, or building this project, autonomous agents must adh
 
 ---
 
-## 1. Threading Model and Constraints
+## 1. Architectural Ground Truth & Role
+
+* **Strict Specification Alignment**: `SPEC.md` is the ground truth technical specification for `clang-wasi`. Autonomous agents must strictly adhere to the architecture, build pipeline, and WASI Host specifications defined in `SPEC.md`. Do not deviate, substitute architectures, or reintroduce legacy `memfs.wasm` components.
+
+---
+
+## 2. Threading Model and Constraints
 
 * **Strictly Single-Threaded:** Target execution is pure WASI Preview 1 (`wasm32-wasip1`). Multithreading **MUST NOT** be enabled:
   `-DLLVM_ENABLE_THREADS=OFF` must always be passed during cross-compilation.
@@ -14,7 +20,7 @@ When developing, debugging, or building this project, autonomous agents must adh
 
 ---
 
-## 2. Toolchain Requirements (`wasi-sdk`)
+## 3. Toolchain Requirements (`wasi-sdk`)
 
 * **Minimum `wasi-sdk` Version:** `wasi-sdk >= 26` (default configured: `29.0`).
   * Older versions (such as `wasi-sdk-24.0`) hardcoded `#define _LIBCPP_HAS_NO_THREADS` in single-threaded libc++, causing `<mutex>` and `<shared_mutex>` header inclusions in LLVM headers to fail compilation.
@@ -23,7 +29,7 @@ When developing, debugging, or building this project, autonomous agents must adh
 
 ---
 
-## 3. Platform Emulation and POSIX Patches
+## 4. Platform Emulation and POSIX Patches
 
 * **POSIX Patches (`scripts/patches/llvm-wasi-${LLVM_VERSION}.patch`):** WASI Preview 1 lacks asynchronous signals, process creation (`fork`/`exec`), `dup2`, file locking (`fcntl`), password databases (`pwd.h`), and BSD sockets.
   * The patch conditionalizes these unsupported features under `!defined(__wasi__)`.
@@ -34,7 +40,7 @@ When developing, debugging, or building this project, autonomous agents must adh
 
 ---
 
-## 4. Build Structure & Release Packaging
+## 5. Build Structure & Release Packaging
 
 The build pipeline consists of two stages followed by community-compatible packaging:
 1. **Stage 1 (Host Build):** Compiles host utilities `llvm-tblgen` and `clang-tblgen` natively inside `build-native/`.
@@ -46,7 +52,7 @@ The build pipeline consists of two stages followed by community-compatible packa
 
 ---
 
-## 5. Resumability and Patch Detection
+## 6. Resumability and Patch Detection
 
 * **Resumable Execution:** `scripts/build.sh` must be safe to interrupt and re-run at any point without redoing completed steps or leaving corrupted intermediate artifacts.
 * **Patch Detection:** Always verify whether `scripts/patches/llvm-wasi-${LLVM_VERSION}.patch` is already applied using `git -C llvm-project apply --reverse --check "${PATCH_FILE}"`. If reverse check passes, skip patching. If forward check passes, apply it. If both fail, fail with an error rather than ignoring failures with `|| true`.
@@ -55,7 +61,7 @@ The build pipeline consists of two stages followed by community-compatible packa
 
 ---
 
-## 6. Pure JavaScript WasiHost & Direct VFS Architecture
+## 7. Pure JavaScript WasiHost & Direct VFS Architecture
 
 This repository eliminates `memfs.wasm` entirely in favor of `src/wasi-host.js`: a zero-dependency, pure JavaScript WASI Preview 1 host directly backed by an in-memory `Map` or Virtual File System (VFS).
 

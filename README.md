@@ -36,6 +36,7 @@ clang-wasi/
 ├── dist/                       # Build output artifacts (generated)
 │   ├── llvm-box.wasm           # Single multicall binary (clang, clang++, wasm-ld, ar, nm, etc.)
 │   └── sysroot.tar.gz          # Standalone C/C++ sysroot archive
+├── SPEC.md                    # Technical specification & architectural ground truth
 ├── AGENTS.md                   # Development rules and platform constraints
 └── README.md
 ```
