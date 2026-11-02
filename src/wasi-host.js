@@ -44,7 +44,7 @@ export class WasiHost {
     this.vfs = options.vfs || new Map();
     this.cwd = options.cwd || '/workspace';
     this.argv = options.argv || ['./a.out'];
-    this.environ = options.environ || { USER: 'student', PWD: this.cwd };
+    this.environ = { USER: 'student', HOME: '/workspace', PWD: this.cwd, ...(options.environ || {}) };
     this.stdin = options.stdin || null;
     this.stdout = options.stdout || (() => {});
     this.stderr = options.stderr || options.stdout || (() => {});
@@ -327,8 +327,11 @@ export class WasiHost {
 
         if (fd === 0 || fd === 1 || fd === 2) {
           this.memU8()[stat_out] = 2; // __WASI_FILETYPE_CHARACTER_DEVICE
-          this.memI64()[(stat_out + 8) >> 3] = ALL_RIGHTS;
-          this.memI64()[(stat_out + 16) >> 3] = ALL_RIGHTS;
+          // wasi-libc isatty() identifies a TTY as a CHARACTER_DEVICE that cannot SEEK or TELL.
+          // Strip __WASI_RIGHTS_FD_SEEK (1n << 2n) and __WASI_RIGHTS_FD_TELL (1n << 5n).
+          const TTY_RIGHTS = ALL_RIGHTS & ~((1n << 2n) | (1n << 5n));
+          this.memI64()[(stat_out + 8) >> 3] = TTY_RIGHTS;
+          this.memI64()[(stat_out + 16) >> 3] = TTY_RIGHTS;
           return ESUCCESS;
         }
 
