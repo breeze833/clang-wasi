@@ -1225,6 +1225,7 @@ export class WasiHost {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     WasiHost,
+    MemoryPipe,
     ProcExit,
     normalizePath,
     ESUCCESS,

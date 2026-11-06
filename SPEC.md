@@ -156,6 +156,9 @@ const host = new WasiHost({
   ],
   onFileSync: (path, bytes) => {}, // Callback when file is written or flushed
   onFileDelete: (path) => {},     // Callback when file is unlinked
+  hostBuiltinLookup: (name) => false, // Optional hook to check if command is a host builtin
+  hostBuiltinName: (index) => null,   // Optional hook to enumerate host builtin names by index
+  hostBuiltinRun: ({ cwd, argc, argv, envp }) => 0, // Host-assisted command execution hook
 });
 ```
 
@@ -222,6 +225,22 @@ try {
 }
 ```
 
+### 4.6 MemoryPipe & Host Execution Bridge
+
+To support subshell command substitution `$(...)`, pipelines `|`, and host-assisted tool execution across interactive shells (such as `busybox-wasi`) and IDE environments (`wasm-c-ide`), `WasiHost` provides an in-memory pipe subsystem and host execution bridges under `env`:
+
+1. **`MemoryPipe` Architecture**:
+   - Manages a FIFO queue of `Uint8Array` chunks with total length tracking.
+   - Slices bytes across chunk boundaries during `fd_read`, ensuring zero data loss and exact boundary handling.
+2. **Write-Reference Counting**:
+   - `__host_pipe(ptr)`: Allocates reader and writer descriptors with `writeRefs = 1`.
+   - `__host_dup(fd)` & `__host_dup2(oldfd, newfd)`: Increment `pipe.writeRefs` when duplicating a pipe writer.
+   - `fd_close(fd)` & `__host_dup2` overwrite: Decrement `pipe.writeRefs`. Only when all writer references reach zero is the pipe closed (`pipe.closed = true`), signaling EOF to the reader. This prevents premature pipe closure during subshell fork-free evaluation.
+3. **Host Builtin & Process Execution Bridges**:
+   - `__host_builtin_lookup`: Queries `hostBuiltinLookup(name)`.
+   - `__host_builtin_name`: Enumerates builtin names via `hostBuiltinName(index)`.
+   - `__host_builtin_run` & `wasi_host_spawn`: Bridges shell execution of external tools (e.g. `gcc`, `clang`, `./a.out`) to `hostBuiltinRun({ cwd, argc, argv, envp })`.
+
 ---
 
 ## 5. Verification & Testing Standards
@@ -233,6 +252,8 @@ To maintain compatibility with upstream LLVM and downstream consumers (such as `
    - Validates in-memory object linking with `wasm-ld`.
    - Validates C++ template compilation and standard library linking.
    - Validates scatter/gather file I/O, file creation, truncation, and directory enumeration.
+   - Validates `MemoryPipe` buffering, chunk boundary slicing, and write-ref lifecycle across `__host_pipe`, `__host_dup`, `__host_dup2`, and `fd_close`.
+   - Validates host builtin lookup, naming, and `wasi_host_spawn` / `__host_builtin_run` dispatch.
 2. **End-to-End Command (`node scripts/test-wasi-host.js`)**:
    ```bash
    node scripts/test-wasi-host.js

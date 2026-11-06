@@ -197,6 +197,7 @@ Historically, projects like `binji/wasm-clang` (2019) relied on a compiled `memf
 This repository eliminates `memfs.wasm` entirely in favor of **`src/wasi-host.js`**:
 * **Direct JavaScript Memory**: Files reside directly in standard JavaScript `Map` or `Uint8Array` memory without Wasm linear memory copying.
 * **Zero Dependencies**: Standard WASI Preview 1 ABI implementation running out of the box in Node.js and modern browser environments.
+* **MemoryPipe & Host Builtins**: Built-in in-memory pipes with write-reference counting (`MemoryPipe`, `__host_pipe`, `dup`, `dup2`) and host process execution hooks (`wasi_host_spawn`, `__host_builtin_*`) for interactive shell integration (e.g. `busybox-wasi`, `wasm-c-ide`).
 * **Dynamic Scale**: File sizes and directories scale naturally with the host JavaScript engine without fixed inode table limits.
 
 ---

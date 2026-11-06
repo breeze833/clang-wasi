@@ -70,6 +70,7 @@ This repository eliminates `memfs.wasm` entirely in favor of `src/wasi-host.js`:
 2. **Unified Architecture:** The same `WasiHost` runs compiler tools (`llvm-box.wasm`) and user-compiled binaries without separate runtimes.
 3. **No 16MB or Inode Table Limits:** File allocation and directory hierarchy scale dynamically with available JavaScript heap.
 4. **Pedagogical and Browser Friendly:** Works identically in Node.js and browser Web Workers (with support for `SharedArrayBuffer` synchronous `Atomics.wait` stdin).
+5. **MemoryPipe & Host Builtins:** Built-in in-memory pipes with write-reference counting and host execution hooks (`wasi_host_spawn`, `__host_builtin_*`) for interactive shell and command substitution workflows.
 
 ### Reference Scripts:
 - `src/wasi-host.js`: Standalone WASI Preview 1 Host implementation.
