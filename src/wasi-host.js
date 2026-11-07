@@ -271,27 +271,36 @@ export class WasiHost {
 
   _vfsReadDir(p) {
     if (!this.vfs) return [];
+    let entries = [];
     if (typeof this.vfs.readDir === 'function') {
       const items = this.vfs.readDir(p);
-      return items.map(i => ({
+      entries = items.map(i => ({
         name: typeof i === 'string' ? i : i.name,
         isDir: typeof i === 'string' ? this._vfsIsDir(`${p}/${i}`) : Boolean(i.isDir || i.isDirectory),
       }));
-    }
-    const prefix = p === '/' ? '/' : `${p}/`;
-    const seen = new Set();
-    const entries = [];
-    const keys = (this.vfs instanceof Map) ? Array.from(this.vfs.keys()) : Object.keys(this.vfs || {});
-    for (const k of keys) {
-      if (k.startsWith(prefix)) {
-        const rest = k.substring(prefix.length);
-        const name = rest.split('/')[0];
-        if (name && !seen.has(name)) {
-          seen.add(name);
-          entries.push({ name, isDir: rest.includes('/') });
+    } else {
+      const prefix = p === '/' ? '/' : `${p}/`;
+      const seen = new Set();
+      const keys = (this.vfs instanceof Map) ? Array.from(this.vfs.keys()) : Object.keys(this.vfs || {});
+      for (const k of keys) {
+        if (k.startsWith(prefix)) {
+          const rest = k.substring(prefix.length);
+          const name = rest.split('/')[0];
+          if (name && !seen.has(name)) {
+            seen.add(name);
+            entries.push({ name, isDir: rest.includes('/') });
+          }
         }
       }
     }
+
+    const norm = normalizePath(p);
+    if (norm === '/dev') {
+      const names = new Set(entries.map(e => e.name));
+      if (!names.has('null')) entries.push({ name: 'null', isDir: false, isCharDev: true });
+      if (!names.has('zero')) entries.push({ name: 'zero', isDir: false, isCharDev: true });
+    }
+
     return entries;
   }
 
@@ -892,7 +901,8 @@ export class WasiHost {
           view.setBigUint64(base, BigInt(i + 1), true); // d_next
           view.setBigUint64(base + 8, this._getInode(`${dirPath}/${entry.name}`), true); // d_ino
           view.setUint32(base + 16, nameBytes.length, true); // d_namlen
-          view.setUint8(base + 20, entry.isDir ? 3 : 4); // d_type
+          const dType = entry.isCharDev ? 2 : (entry.isDir ? 3 : 4); // CHARACTER_DEVICE = 2, DIRECTORY = 3, REGULAR_FILE = 4
+          view.setUint8(base + 20, dType); // d_type
 
           this.memU8().set(nameBytes, base + 24);
           written += entryLen;
