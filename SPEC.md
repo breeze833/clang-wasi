@@ -48,7 +48,7 @@ In addition to compiled toolchain binaries, `clang-wasi` provides **`src/wasi-ho
 |  |   | WasiHost Engine           |         | In-Memory Virtual File System     |   |  |
 |  |   | - Descriptor Table (0..N) |<───────>| - JavaScript Map / Uint8Array     |   |  |
 |  |   | - Dynamic Inode Mapping   |         | - Preopened Directories:          |   |  |
-|  |   | - Capability Enforcement  |         |   fd 3: '.' (/workspace)          |   |  |
+|  |   | - Capability Enforcement  |         |   fd 3: '.' (Working Directory)   |   |  |
 |  |   | - Scatter/Gather I/O      |         |   fd 4: '/' (Sysroot Root)        |   |  |
 |  |   +─────────────┬─────────────+         +───────────────────────────────────+   |  |
 |  |                 │ imports (wasi_snapshot_preview1)                                  |  |
@@ -143,9 +143,9 @@ import { WasiHost } from './src/wasi-host.js';
 
 const host = new WasiHost({
   vfs: mapOrVfsObject,            // Map or object containing path -> Uint8Array entries
-  cwd: '/workspace',              // Current working directory (default: '/workspace')
+  cwd: '/workspace',              // Current working directory (default: '/')
   argv: ['clang', '-cc1', ...],   // Command-line arguments
-  environ: { USER: 'student' },  // Environment variables
+  environ: { PWD: '/workspace' }, // Environment variables (default: { HOME: cwd, PWD: cwd })
   stdin: null,                    // Interactive stdin reader function or Uint8Array buffer
   stdout: (text) => {},           // Standard output callback
   stderr: (text) => {},           // Standard error callback
@@ -162,9 +162,10 @@ const host = new WasiHost({
 ### 4.3 Preopened Directory Resolution
 
 `WasiHost` enforces capability-based directory access per WASI specification:
-- Descriptor 3 (`.`): Defaults to `this.cwd` (e.g. `/workspace`).
+- Descriptor 3 (`.`): Defaults to `this.cwd` (current working directory, e.g. `/workspace` or `/`).
 - Descriptor 4 (`/`): Defaults to `/` (sysroot root).
 - Relative paths passed to `path_open(dirfd, pathStr, ...)` resolve against the base path corresponding to `dirfd`.
+- If `dirfd` is descriptor 4 (`/`) and the path does not target an existing top-level directory in VFS (e.g. bare filenames like `main.c` or `libfoo.a` passed by toolchain utilities), `resolvePath` resolves them relative to `this.cwd`.
 - Normalization: Path segments (`.`, `..`, redundant slashes) are cleanly resolved via `normalizePath()`.
 
 ### 4.4 Comprehensive WASI Preview 1 Syscall Specifications

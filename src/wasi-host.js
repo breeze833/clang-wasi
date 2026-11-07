@@ -42,9 +42,9 @@ export function normalizePath(path) {
 export class WasiHost {
   constructor(options = {}) {
     this.vfs = options.vfs || new Map();
-    this.cwd = options.cwd || '/workspace';
+    this.cwd = options.cwd || '/';
     this.argv = options.argv || ['./a.out'];
-    this.environ = { USER: 'student', HOME: '/workspace', PWD: this.cwd, ...(options.environ || {}) };
+    this.environ = { HOME: this.cwd, PWD: this.cwd, ...(options.environ || {}) };
     this.stdin = options.stdin || null;
     this.stdout = options.stdout || (() => {});
     this.stderr = options.stderr || options.stdout || (() => {});
@@ -67,7 +67,10 @@ export class WasiHost {
     this.stdinPos = 0;
     this.inodes = new Map();
     this.nextInode = 100n;
-    this.createdDirs = new Set(['/', '/workspace', '/usr', '/bin', '/usr/include', '/usr/lib', '/include', '/lib']);
+    this.createdDirs = new Set(['/', '/usr', '/bin', '/usr/include', '/usr/lib', '/include', '/lib']);
+    if (this.cwd && this.cwd !== '/') {
+      this.createdDirs.add(normalizePath(this.cwd));
+    }
     this.textDecoder = new TextDecoder('utf-8', { fatal: false });
   }
 
@@ -131,23 +134,22 @@ export class WasiHost {
     if (pathStr.startsWith('/')) return normalizePath(pathStr);
 
     const clean = pathStr.replace(/^\.?\/+/, '');
-    if (base === '/workspace' && clean.startsWith('workspace/')) {
-      return normalizePath(`/${clean}`);
-    }
-
     const candidate = normalizePath(`${base}/${clean}`);
     if (this._vfsExists(candidate) || this._vfsIsDir(candidate)) {
       return candidate;
     }
 
     if (base === '/' && this.cwd && this.cwd !== '/') {
-      const cleanNoWorkspace = clean.startsWith('workspace/') ? clean.substring('workspace/'.length) : clean;
-      const cwdCandidate = normalizePath(`${this.cwd}/${cleanNoWorkspace}`);
-      if (this._vfsExists(cwdCandidate) || this._vfsIsDir(cwdCandidate)) {
-        return cwdCandidate;
-      }
-      if (!clean.startsWith('include/') && !clean.startsWith('lib/') && !clean.startsWith('usr/') && !clean.startsWith('bin/')) {
-        return cwdCandidate;
+      const firstSegment = clean.split('/')[0];
+      const isRootEntry = this._vfsIsDir('/' + firstSegment) || this._vfsExists('/' + firstSegment);
+      if (!isRootEntry) {
+        const cwdCandidate = normalizePath(`${this.cwd}/${clean}`);
+        if (this._vfsExists(cwdCandidate) || this._vfsIsDir(cwdCandidate)) {
+          return cwdCandidate;
+        }
+        if (!clean.startsWith('include/') && !clean.startsWith('lib/') && !clean.startsWith('usr/') && !clean.startsWith('bin/')) {
+          return cwdCandidate;
+        }
       }
     }
 
@@ -172,7 +174,7 @@ export class WasiHost {
 
   _vfsIsDir(p) {
     if (!this.vfs) return false;
-    if (p === '/' || p === '/workspace') return true;
+    if (p === '/') return true;
     if (this.createdDirs && this.createdDirs.has(p)) return true;
     if (typeof this.vfs.stat === 'function') {
       const s = this.vfs.stat(p);
