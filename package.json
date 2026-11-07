@@ -1,0 +1,24 @@
+{
+  "name": "clang-wasi",
+  "version": "19.1.0",
+  "description": "Standalone LLVM 19, Clang, and LLD WebAssembly binaries for wasm32-wasip1 with Pure JavaScript WASI Host",
+  "main": "src/wasi-host.js",
+  "scripts": {
+    "test": "node examples/host-reference.js && node scripts/test-wasi-host.js",
+    "test:reference": "node examples/host-reference.js",
+    "test:wasi-host": "node scripts/test-wasi-host.js",
+    "run:reference": "node examples/host-reference.js"
+  },
+  "keywords": [
+    "llvm",
+    "clang",
+    "lld",
+    "wasm",
+    "wasi",
+    "wasm32-wasip1",
+    "pure-javascript-wasi",
+    "vfs"
+  ],
+  "author": "Antigravity Team",
+  "license": "Apache-2.0"
+}

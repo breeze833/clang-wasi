@@ -39,47 +39,6 @@ export function normalizePath(path) {
   return result === '' ? '/' : result;
 }
 
-export class MemoryPipe {
-  constructor() {
-    this.chunks = [];
-    this.totalLen = 0;
-    this.closed = false;
-    this.writeRefs = 0;
-  }
-  write(data) {
-    if (this.closed || !data || data.length === 0) return 0;
-    this.chunks.push(new Uint8Array(data));
-    this.totalLen += data.length;
-    return data.length;
-  }
-  read(maxLen) {
-    if (this.totalLen === 0) {
-      return new Uint8Array(0);
-    }
-    const toRead = Math.min(maxLen, this.totalLen);
-    const result = new Uint8Array(toRead);
-    let offset = 0;
-    while (offset < toRead && this.chunks.length > 0) {
-      const head = this.chunks[0];
-      const needed = toRead - offset;
-      if (head.length <= needed) {
-        result.set(head, offset);
-        offset += head.length;
-        this.chunks.shift();
-      } else {
-        result.set(head.subarray(0, needed), offset);
-        offset += needed;
-        this.chunks[0] = head.subarray(needed);
-      }
-    }
-    this.totalLen -= toRead;
-    return result;
-  }
-  close() {
-    this.closed = true;
-  }
-}
-
 export class WasiHost {
   constructor(options = {}) {
     this.vfs = options.vfs || new Map();
@@ -92,9 +51,6 @@ export class WasiHost {
     this.getMemory = options.getMemory || null;
     this.onFileSync = options.onFileSync || null;
     this.onFileDelete = options.onFileDelete || null;
-    this.hostBuiltinLookup = options.hostBuiltinLookup || null;
-    this.hostBuiltinRun = options.hostBuiltinRun || null;
-    this.hostBuiltinName = options.hostBuiltinName || null;
 
     this.preopens = options.preopens || [
       { fd: 3, path: this.cwd, name: '.' },
@@ -586,16 +542,8 @@ export class WasiHost {
       },
 
       fd_close: (fd) => {
-        if (this.openFiles.has(fd)) {
-          const file = this.openFiles.get(fd);
-          if (file && file.isPipeWrite && file.pipe) {
-            file.pipe.writeRefs--;
-            if (file.pipe.writeRefs <= 0) {
-              file.pipe.close();
-            }
-          }
-          this.openFiles.delete(fd);
-        }
+        if (fd >= 0 && fd <= 2) return ESUCCESS;
+        this.openFiles.delete(fd);
         return ESUCCESS;
       },
 
@@ -627,25 +575,7 @@ export class WasiHost {
           return ESUCCESS;
         }
 
-        if (!file) return EBADF;
-
-        if (file.isPipeRead && file.pipe) {
-          let totalRead = 0;
-          for (let i = 0; i < iovs_len; i++) {
-            const bufPtr = this.memU32()[(iovs >> 2) + i * 2];
-            const bufLen = this.memU32()[(iovs >> 2) + i * 2 + 1];
-            if (bufLen <= 0) continue;
-            const data = file.pipe.read(bufLen);
-            if (data.length === 0) break;
-            this.memU8().set(data, bufPtr);
-            totalRead += data.length;
-            if (data.length < bufLen) break;
-          }
-          this.memU32()[nread_out >> 2] = totalRead;
-          return ESUCCESS;
-        }
-
-        if (file.isDir || !file.canRead) return EBADF;
+        if (!file || file.isDir || !file.canRead) return EBADF;
 
         const data = this._vfsReadFile(file.path);
         let totalRead = 0;
@@ -714,23 +644,7 @@ export class WasiHost {
           return ESUCCESS;
         }
 
-        if (!file) return EBADF;
-
-        if (file.isPipeWrite && file.pipe) {
-          let totalWritten = 0;
-          for (let i = 0; i < iovs_len; i++) {
-            const ptr = this.memU32()[(iovs >> 2) + i * 2];
-            const len = this.memU32()[(iovs >> 2) + i * 2 + 1];
-            if (len <= 0) continue;
-            const chunk = this.memU8().subarray(ptr, ptr + len);
-            file.pipe.write(chunk);
-            totalWritten += len;
-          }
-          this.memU32()[nwritten_out >> 2] = totalWritten;
-          return ESUCCESS;
-        }
-
-        if (file.isDir || !file.canWrite) return EBADF;
+        if (!file || file.isDir || !file.canWrite) return EBADF;
 
         let data = this._vfsReadFile(file.path);
         let totalWritten = 0;
@@ -1083,136 +997,11 @@ export class WasiHost {
 
   createImportObject(customEnv = {}) {
     const wasi = this.getImports();
-    const envObj = {
-      __host_trace: () => {},
-      __host_pipe: (ptr) => {
-        const pipe = new MemoryPipe();
-        pipe.writeRefs = 1;
-        const readFd = this.nextFd++;
-        const writeFd = this.nextFd++;
-        this.openFiles.set(readFd, {
-          fd: readFd,
-          pipe,
-          isPipeRead: true,
-          canRead: true,
-          canWrite: false,
-          isDir: false,
-        });
-        this.openFiles.set(writeFd, {
-          fd: writeFd,
-          pipe,
-          isPipeWrite: true,
-          canRead: false,
-          canWrite: true,
-          isDir: false,
-        });
-        const view = new DataView(this.mem().buffer);
-        view.setInt32(ptr, readFd, true);
-        view.setInt32(ptr + 4, writeFd, true);
-        return 0;
-      },
-      __host_dup: (fd) => {
-        if (!this.openFiles.has(fd)) return -1;
-        const orig = this.openFiles.get(fd);
-        if (orig.isPipeWrite && orig.pipe) {
-          orig.pipe.writeRefs++;
-        }
-        const newFd = this.nextFd++;
-        this.openFiles.set(newFd, { ...orig, fd: newFd });
-        return newFd;
-      },
-      __host_dup2: (oldfd, newfd) => {
-        if (!this.openFiles.has(oldfd)) return -1;
-        if (this.openFiles.has(newfd)) {
-          const prev = this.openFiles.get(newfd);
-          if (prev && prev.isPipeWrite && prev.pipe) {
-            prev.pipe.writeRefs--;
-            if (prev.pipe.writeRefs <= 0) {
-              prev.pipe.close();
-            }
-          }
-          this.openFiles.delete(newfd);
-        }
-        const orig = this.openFiles.get(oldfd);
-        if (orig.isPipeWrite && orig.pipe) {
-          orig.pipe.writeRefs++;
-        }
-        this.openFiles.set(newfd, { ...orig, fd: newfd });
-        return newfd;
-      },
-      __host_winsize: () => 0,
-      __host_winch: () => 0,
-      __host_interrupt: () => 0,
-      __host_builtin_lookup: (namePtr, len) => {
-        const name = this.readStr(namePtr, len);
-        if (typeof this.hostBuiltinLookup === 'function') {
-          return this.hostBuiltinLookup(name) ? 1 : 0;
-        }
-        return 0;
-      },
-      __host_builtin_name: (index, bufPtr, len) => {
-        if (typeof this.hostBuiltinName === 'function') {
-          const str = this.hostBuiltinName(index);
-          if (!str) return 0;
-          const bytes = new TextEncoder().encode(str);
-          const copyLen = Math.min(bytes.length, len);
-          new Uint8Array(this.mem().buffer, bufPtr, copyLen).set(bytes.subarray(0, copyLen));
-          return copyLen;
-        }
-        return 0;
-      },
-      __host_builtin_run: (cwdPtr, argc, argvPtr, envpPtr) => {
-        const cwd = this.readStr(cwdPtr) || this.cwd;
-        const argv = [];
-        const view = new DataView(this.mem().buffer);
-        for (let i = 0; i < argc; i++) {
-          const strPtr = view.getUint32(argvPtr + i * 4, true);
-          argv.push(this.readStr(strPtr));
-        }
-        const envp = [];
-        let envIdx = 0;
-        while (true) {
-          const strPtr = view.getUint32(envpPtr + envIdx * 4, true);
-          if (strPtr === 0) break;
-          envp.push(this.readStr(strPtr));
-          envIdx++;
-        }
-        if (typeof this.hostBuiltinRun === 'function') {
-          return this.hostBuiltinRun({ cwd, argc, argv, envp });
-        }
-        return 127;
-      },
-      wasi_host_spawn: (cmdPtr, argvPtr, envpPtr) => {
-        const cmd = this.readStr(cmdPtr);
-        const view = new DataView(this.mem().buffer);
-        const argv = [];
-        let argIdx = 0;
-        while (true) {
-          const strPtr = view.getUint32(argvPtr + argIdx * 4, true);
-          if (strPtr === 0) break;
-          argv.push(this.readStr(strPtr));
-          argIdx++;
-        }
-        const envp = [];
-        let envIdx = 0;
-        while (true) {
-          const strPtr = view.getUint32(envpPtr + envIdx * 4, true);
-          if (strPtr === 0) break;
-          envp.push(this.readStr(strPtr));
-          envIdx++;
-        }
-        if (typeof this.hostBuiltinRun === 'function') {
-          return this.hostBuiltinRun({ cwd: this.cwd, argc: argv.length, argv: argv.length > 0 ? argv : [cmd], envp });
-        }
-        return 127;
-      },
-      ...customEnv,
-    };
 
     return {
       wasi_snapshot_preview1: wasi,
       wasi_unstable: wasi,
-      env: new Proxy(envObj, {
+      env: new Proxy(customEnv, {
         get(t, p) {
           if (p in t) return t[p];
           return () => 0;
@@ -1225,7 +1014,6 @@ export class WasiHost {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     WasiHost,
-    MemoryPipe,
     ProcExit,
     normalizePath,
     ESUCCESS,

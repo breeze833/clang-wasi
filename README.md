@@ -23,19 +23,25 @@ clang-wasi/
 ├── .github/
 │   └── workflows/
 │       └── build-release.yml   # Automated release and CI workflow
+├── docs/
+│   └── HOST_FUNCTIONS.md      # Authoritative host-assisted functions contract & specification
 ├── scripts/
 │   ├── build.sh                # Main two-stage cross-compilation pipeline
 │   ├── test.sh                 # Verification test suite (C & C++)
+│   ├── test-wasi-host.js       # In-memory VFS and compiler verification test suite
 │   ├── wasi-run.js             # Node.js WASI test runner helper
 │   └── patches/
 │       └── llvm-wasi-19.1.0.patch # Version-specific WASI compatibility patch
 ├── src/
 │   └── wasi-host.js            # Standalone zero-dependency pure JS WASI Preview 1 host
 ├── examples/
+│   ├── host-reference.js       # Production-grade reference runner with self-verification
 │   └── wasi-host-run.js        # Standalone in-memory C compilation & execution example
 ├── dist/                       # Build output artifacts (generated)
 │   ├── llvm-box.wasm           # Single multicall binary (clang, clang++, wasm-ld, ar, nm, etc.)
-│   └── sysroot.tar.gz          # Standalone C/C++ sysroot archive
+│   ├── sysroot.tar.gz          # Standalone C/C++ sysroot archive
+│   └── wasi-host.js            # Packaged WASI host module
+├── package.json                # NPM test runner and package metadata
 ├── SPEC.md                    # Technical specification & architectural ground truth
 ├── AGENTS.md                   # Development rules and platform constraints
 └── README.md
@@ -154,11 +160,34 @@ instance.exports._start();
 const objBytes = vfs.get('/workspace/main.o');
 ```
 
-See `examples/wasi-host-run.js` for a complete runnable example compiling, linking, and executing C code entirely in memory.
+### 3. Standalone Reference Host & Self-Verification (`examples/host-reference.js`)
+
+Run the zero-dependency reference runner to unpack the sysroot into an in-memory VFS, compile C and C++ programs with `llvm-box.wasm`, link with `wasm-ld`, and execute the resulting WebAssembly executables with assertions:
+
+```bash
+# Run standalone reference runner
+node examples/host-reference.js
+
+# Or run the full automated verification test suite
+npm test
+```
+
+External integrators (such as `wasm-c-ide` or educational platforms) can import `WasiHost` and the helper drivers directly:
+
+```javascript
+const {
+  WasiHost,
+  createVfsFromSysroot,
+  compileC,
+  compileCpp,
+  linkWasm,
+  runWasm,
+} = require('./examples/host-reference.js');
+```
 
 ---
 
-### 3. Browser Usage with `browser_wasi_shim`
+### 4. Browser Usage with `browser_wasi_shim`
 
 Mount your virtual file tree, provide the sysroot and headers, and invoke the module directly:
 
@@ -197,7 +226,8 @@ Historically, projects like `binji/wasm-clang` (2019) relied on a compiled `memf
 This repository eliminates `memfs.wasm` entirely in favor of **`src/wasi-host.js`**:
 * **Direct JavaScript Memory**: Files reside directly in standard JavaScript `Map` or `Uint8Array` memory without Wasm linear memory copying.
 * **Zero Dependencies**: Standard WASI Preview 1 ABI implementation running out of the box in Node.js and modern browser environments.
-* **MemoryPipe & Host Builtins**: Built-in in-memory pipes with write-reference counting (`MemoryPipe`, `__host_pipe`, `dup`, `dup2`) and host process execution hooks (`wasi_host_spawn`, `__host_builtin_*`) for interactive shell integration (e.g. `busybox-wasi`, `wasm-c-ide`).
+* **Pure WASI Preview 1 Contract**: Operates strictly via standard WASI Preview 1 (`wasi_snapshot_preview1`) and in-memory VFS scatter/gather operations. Decouples foreign BusyBox-specific shell hooks, ensuring clean single-threaded toolchain execution.
+* **Authoritative Specification & Reference Runner**: Fully defined in `docs/HOST_FUNCTIONS.md` and verified in `examples/host-reference.js`.
 * **Dynamic Scale**: File sizes and directories scale naturally with the host JavaScript engine without fixed inode table limits.
 
 ---

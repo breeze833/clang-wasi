@@ -156,9 +156,6 @@ const host = new WasiHost({
   ],
   onFileSync: (path, bytes) => {}, // Callback when file is written or flushed
   onFileDelete: (path) => {},     // Callback when file is unlinked
-  hostBuiltinLookup: (name) => false, // Optional hook to check if command is a host builtin
-  hostBuiltinName: (index) => null,   // Optional hook to enumerate host builtin names by index
-  hostBuiltinRun: ({ cwd, argc, argv, envp }) => 0, // Host-assisted command execution hook
 });
 ```
 
@@ -225,37 +222,35 @@ try {
 }
 ```
 
-### 4.6 MemoryPipe & Host Execution Bridge
+### 4.6 Pure WASI Preview 1 Invariant & Decoupling of Shell Hooks
 
-To support subshell command substitution `$(...)`, pipelines `|`, and host-assisted tool execution across interactive shells (such as `busybox-wasi`) and IDE environments (`wasm-c-ide`), `WasiHost` provides an in-memory pipe subsystem and host execution bridges under `env`:
-
-1. **`MemoryPipe` Architecture**:
-   - Manages a FIFO queue of `Uint8Array` chunks with total length tracking.
-   - Slices bytes across chunk boundaries during `fd_read`, ensuring zero data loss and exact boundary handling.
-2. **Write-Reference Counting**:
-   - `__host_pipe(ptr)`: Allocates reader and writer descriptors with `writeRefs = 1`.
-   - `__host_dup(fd)` & `__host_dup2(oldfd, newfd)`: Increment `pipe.writeRefs` when duplicating a pipe writer.
-   - `fd_close(fd)` & `__host_dup2` overwrite: Decrement `pipe.writeRefs`. Only when all writer references reach zero is the pipe closed (`pipe.closed = true`), signaling EOF to the reader. This prevents premature pipe closure during subshell fork-free evaluation.
-3. **Host Builtin & Process Execution Bridges**:
-   - `__host_builtin_lookup`: Queries `hostBuiltinLookup(name)`.
-   - `__host_builtin_name`: Enumerates builtin names via `hostBuiltinName(index)`.
-   - `__host_builtin_run` & `wasi_host_spawn`: Bridges shell execution of external tools (e.g. `gcc`, `clang`, `./a.out`) to `hostBuiltinRun({ cwd, argc, argv, envp })`.
+`clang-wasi` (`llvm-box.wasm` multicall driver and user executables compiled for WASI Preview 1) operates strictly over pure WASI Preview 1 (`wasi_snapshot_preview1` / `wasi_unstable`) and direct VFS file operations:
+1. **Toolchain Purity**: The compiler toolchain requires zero custom host functions beyond standard WASI Preview 1. It imports exactly 30 standard syscall functions from `wasi_snapshot_preview1`.
+2. **Decoupling of Foreign Shell Hooks**: Interactive shell hooks (`__host_pipe`, `__host_dup`, `__host_dup2`, `__host_winsize`, `__host_winch`, `__host_interrupt`, `__host_sock_*`, `__host_builtin_*`, `wasi_host_spawn`) which originated in foreign BusyBox shell environments are decoupled and removed from `src/wasi-host.js`.
+3. **Reference Host & Component Provider Contract**:
+   - `docs/HOST_FUNCTIONS.md` is the authoritative technical specification for host function signatures, memory layouts (`__wasi_ciovec_t`, `__wasi_iovec_t`, `__wasi_filestat_t`, `__wasi_fdstat_t`, `__wasi_dirent_t`, `__wasi_prestat_t`), and error codes.
+   - `examples/host-reference.js` provides a zero-dependency, production-grade reference runner implementing 100% of the contract and providing integrated self-verification (`npm test` / `node examples/host-reference.js`).
+   - If downstream integrators (such as `wasm-c-ide` or interactive shells) require custom `env` bindings, `WasiHost.prototype.createImportObject(customEnv)` accepts custom extensions with permissive fallback proxies.
 
 ---
 
 ## 5. Verification & Testing Standards
 
-To maintain compatibility with upstream LLVM and downstream consumers (such as `wasm-c-ide`), all modifications must pass the test suite:
+To maintain compatibility with upstream LLVM, WASI Preview 1, and downstream consumers (such as `wasm-c-ide`), all modifications must pass the test suite:
 
-1. **Automated WasiHost Test Suite (`scripts/test-wasi-host.js`)**:
+1. **Standalone Host Reference Self-Verification (`node examples/host-reference.js`)**:
+   - Validates in-memory sysroot extraction via `createVfsFromSysroot`.
+   - Validates C compilation, linking, and execution.
+   - Validates C++ template compilation and standard library linking.
+   - Validates multicall tool execution (`llvm-cxxfilt`).
+2. **Automated WasiHost Test Suite (`node scripts/test-wasi-host.js`)**:
    - Validates in-memory C compilation with `dist/llvm-box.wasm`.
    - Validates in-memory object linking with `wasm-ld`.
    - Validates C++ template compilation and standard library linking.
    - Validates scatter/gather file I/O, file creation, truncation, and directory enumeration.
-   - Validates `MemoryPipe` buffering, chunk boundary slicing, and write-ref lifecycle across `__host_pipe`, `__host_dup`, `__host_dup2`, and `fd_close`.
-   - Validates host builtin lookup, naming, and `wasi_host_spawn` / `__host_builtin_run` dispatch.
-2. **End-to-End Command (`node scripts/test-wasi-host.js`)**:
+   - Validates UTF-8 decoding and high-precision `poll_oneoff` timer delay.
+3. **Unified Verification Suite (`npm test`)**:
    ```bash
-   node scripts/test-wasi-host.js
+   npm test
    ```
    Must complete with zero errors and exit code 0.
