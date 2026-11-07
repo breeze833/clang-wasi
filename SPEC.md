@@ -174,15 +174,15 @@ const host = new WasiHost({
 
 | Syscall | WASI Code | Specification & Behavior |
 |---|---|---|
-| `path_open` | 0 | Resolves `dirfd` and relative path; checks flags (`O_CREAT`, `O_TRUNC`, `O_EXCL`, `O_DIRECTORY`) and append mode (`FDFLAG_APPEND`); allocates `fd >= 10`. |
-| `fd_read` / `fd_pread` | 0 | Scatter/gather reads across `iovec` structs. For `fd 0`, delegates to `stdin` handler (synchronous `Atomics.wait` or preloaded stream). For regular files, copies from VFS buffer into Wasm memory. |
-| `fd_write` / `fd_pwrite` | 0 | Scatter/gather writes across `ciovec` structs. For `fd 1` / `fd 2`, decodes UTF-8 and routes to `stdout` / `stderr`. For regular files, expands buffer and triggers `onFileSync`. |
-| `fd_seek` | 0 | Adjusts descriptor byte offset (`SEEK_SET = 0`, `SEEK_CUR = 1`, `SEEK_END = 2`). |
+| `path_open` | 0 | Resolves `dirfd` and relative path; checks flags (`O_CREAT`, `O_TRUNC`, `O_EXCL`, `O_DIRECTORY`) and append mode (`FDFLAG_APPEND`); allocates `fd >= 10`. Supports virtual character devices `/dev/null` and `/dev/zero` without physical VFS allocation. |
+| `fd_read` / `fd_pread` | 0 | Scatter/gather reads across `iovec` structs. For `fd 0`, delegates to `stdin` handler (synchronous `Atomics.wait` or preloaded stream). For `/dev/null`, returns EOF (`0` bytes). For `/dev/zero`, fills buffers with `0x00`. For regular files, copies from VFS buffer into Wasm memory. |
+| `fd_write` / `fd_pwrite` | 0 | Scatter/gather writes across `ciovec` structs. For `fd 1` / `fd 2`, decodes UTF-8 and routes to `stdout` / `stderr`. For `/dev/null` and `/dev/zero`, discards data immediately without VFS storage. For regular files, expands buffer and triggers `onFileSync`. |
+| `fd_seek` | 0 | Adjusts descriptor byte offset (`SEEK_SET = 0`, `SEEK_CUR = 1`, `SEEK_END = 2`). For character devices, returns `ESUCCESS` (`offset = 0`). |
 | `fd_tell` | 0 | Returns current byte offset for descriptor. |
 | `fd_close` | 0 | Deallocates descriptor table entry. |
-| `fd_filestat_get` | 0 | Writes 64-byte `__wasi_filestat_t` layout (`dev=1n`, `ino`, `filetype`, `nlink=1`, `size` at offset 32, timestamps). |
+| `fd_filestat_get` | 0 | Writes 64-byte `__wasi_filestat_t` layout (`dev=1n`, `ino`, `filetype`, `nlink=1`, `size` at offset 32, timestamps). Reports `CHARACTER_DEVICE` (type 2) for stdio and `/dev/{null,zero}`. |
 | `fd_filestat_set_size` | 0 | Truncates or extends descriptor file buffer. |
-| `path_filestat_get` | 0 | Queries file metadata directly by path without opening. |
+| `path_filestat_get` | 0 | Queries file metadata directly by path without opening. Recognizes `/dev/null` and `/dev/zero` as `CHARACTER_DEVICE`. |
 | `path_filestat_set_times` | 0 | Updates access and modification timestamps. |
 | `fd_readdir` | 0 | Serializes standard 24-byte `__wasi_dirent_t` headers with deterministic cookie sequence. |
 | `path_create_directory` | 0 | Creates directory entry in VFS. |
@@ -201,7 +201,17 @@ const host = new WasiHost({
 | `random_get` | 0 | Populates random byte buffer via Web Crypto API `crypto.getRandomValues()`. |
 | `proc_exit` | - | Throws `ProcExit(code, changedFiles, deletedFiles)` caught by execution wrapper. |
 
-### 4.5 Execution Wrapper & Lifecycle
+### 4.5 Virtual Character Devices (`/dev/null`, `/dev/zero`)
+
+To prevent guest programs and shell commands (e.g. output suppression `cmd > /dev/null 2>&1` or zero byte generators `head -c 16 /dev/zero`) from leaking spurious files into the user workspace or bloating the virtual filesystem, `WasiHost` provides built-in virtual character devices:
+1. **Root Directory Recognition**:
+   - `/dev` is permanently recognized as a system virtual root directory alongside `/usr`, `/bin`, `/include`, `/lib`.
+   - Relative path resolution against preopened root descriptor `4` (`/`) preserves `dev/null` and `dev/zero` as `/dev/null` and `/dev/zero` instead of prefixing `this.cwd` (such as `/workspace/dev/null`).
+2. **Device Behaviors**:
+   - **`/dev/null`**: Reads return EOF (`0` bytes, `ESUCCESS`); writes discard all data immediately without storing bytes in VFS; `stat` queries report `__WASI_FILETYPE_CHARACTER_DEVICE` (type 2) with size `0`.
+   - **`/dev/zero`**: Reads fill the destination buffer with `0x00` bytes up to the requested length; writes discard all data; `stat` queries report `__WASI_FILETYPE_CHARACTER_DEVICE` (type 2) with size `0`.
+
+### 4.6 Execution Wrapper & Lifecycle
 
 `WasiHost.prototype.createImportObject()` returns the host imports required for `WebAssembly.instantiate`:
 ```javascript

@@ -499,6 +499,81 @@ int main() {
   console.log(`[+] poll_oneoff clock delay succeeded (${elapsed}ms elapsed).`);
   console.log('[PASS] WasiHost UTF-8 and clock delay verified!');
 
+  // 7. Test virtual character devices (/dev/null, /dev/zero)
+  console.log('7. Testing virtual character devices (/dev/null, /dev/zero)...');
+  const wasi = imports.wasi_snapshot_preview1;
+  const pathBufPtr = 500;
+  const openedFdPtr = 548;
+  const iovsPtr = 560;
+  const nioPtr = 580;
+  const statPtr = 600;
+
+  // Verify /dev/null path resolution
+  if (testHost.resolvePath(4, 'dev/null') !== '/dev/null') {
+    throw new Error(`resolvePath(4, "dev/null") must be /dev/null, got: ${testHost.resolvePath(4, 'dev/null')}`);
+  }
+  if (testHost.resolvePath(4, 'dev/zero') !== '/dev/zero') {
+    throw new Error(`resolvePath(4, "dev/zero") must be /dev/zero, got: ${testHost.resolvePath(4, 'dev/zero')}`);
+  }
+
+  // Open /dev/null
+  testBuf.set(new TextEncoder().encode('dev/null'), pathBufPtr);
+  let rc = wasi.path_open(4, 0, pathBufPtr, 8, 1, 0n, 0n, 0, openedFdPtr);
+  if (rc !== 0) throw new Error(`path_open(/dev/null) failed with rc=${rc}`);
+  const fdNull = view.getUint32(openedFdPtr, true);
+
+  // Write to /dev/null
+  testBuf.set(new TextEncoder().encode('Discard this data'), 700);
+  view.setUint32(iovsPtr, 700, true);
+  view.setUint32(iovsPtr + 4, 17, true);
+  rc = wasi.fd_write(fdNull, iovsPtr, 1, nioPtr);
+  if (rc !== 0 || view.getUint32(nioPtr, true) !== 17) {
+    throw new Error(`fd_write to /dev/null failed, rc=${rc}, written=${view.getUint32(nioPtr, true)}`);
+  }
+  if (vfs.has('/dev/null') || vfs.has('/workspace/dev/null')) {
+    throw new Error('Writing to /dev/null must not create entries in VFS');
+  }
+
+  // Read from /dev/null (should return EOF = 0 bytes)
+  rc = wasi.fd_read(fdNull, iovsPtr, 1, nioPtr);
+  if (rc !== 0 || view.getUint32(nioPtr, true) !== 0) {
+    throw new Error(`fd_read from /dev/null must return EOF (0 bytes), got: ${view.getUint32(nioPtr, true)}`);
+  }
+
+  // Stat /dev/null
+  rc = wasi.fd_filestat_get(fdNull, statPtr);
+  if (rc !== 0 || testBuf[statPtr + 16] !== 2) {
+    throw new Error(`fd_filestat_get(/dev/null) must report CHARACTER_DEVICE (type 2), got: ${testBuf[statPtr + 16]}`);
+  }
+  wasi.fd_close(fdNull);
+
+  // Open /dev/zero
+  testBuf.set(new TextEncoder().encode('dev/zero'), pathBufPtr);
+  rc = wasi.path_open(4, 0, pathBufPtr, 8, 1, 0n, 0n, 0, openedFdPtr);
+  if (rc !== 0) throw new Error(`path_open(/dev/zero) failed with rc=${rc}`);
+  const fdZero = view.getUint32(openedFdPtr, true);
+
+  // Read from /dev/zero (should fill with 0x00)
+  testBuf.fill(0xAA, 750, 750 + 32);
+  view.setUint32(iovsPtr, 750, true);
+  view.setUint32(iovsPtr + 4, 32, true);
+  rc = wasi.fd_read(fdZero, iovsPtr, 1, nioPtr);
+  if (rc !== 0 || view.getUint32(nioPtr, true) !== 32) {
+    throw new Error(`fd_read from /dev/zero failed, rc=${rc}, read=${view.getUint32(nioPtr, true)}`);
+  }
+  for (let i = 750; i < 750 + 32; i++) {
+    if (testBuf[i] !== 0) throw new Error(`Byte at ${i} should be 0x00, got ${testBuf[i]}`);
+  }
+
+  // Stat /dev/zero
+  rc = wasi.fd_filestat_get(fdZero, statPtr);
+  if (rc !== 0 || testBuf[statPtr + 16] !== 2) {
+    throw new Error(`fd_filestat_get(/dev/zero) must report CHARACTER_DEVICE (type 2), got: ${testBuf[statPtr + 16]}`);
+  }
+  wasi.fd_close(fdZero);
+
+  console.log('[PASS] Virtual character devices (/dev/null, /dev/zero) verified!');
+
   console.log('======================================================');
   console.log('   All WasiHost standalone tests PASSED successfully! ');
   console.log('======================================================');

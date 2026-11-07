@@ -67,7 +67,7 @@ export class WasiHost {
     this.stdinPos = 0;
     this.inodes = new Map();
     this.nextInode = 100n;
-    this.createdDirs = new Set(['/', '/usr', '/bin', '/usr/include', '/usr/lib', '/include', '/lib']);
+    this.createdDirs = new Set(['/', '/dev', '/usr', '/bin', '/usr/include', '/usr/lib', '/include', '/lib']);
     if (this.cwd && this.cwd !== '/') {
       this.createdDirs.add(normalizePath(this.cwd));
     }
@@ -147,15 +147,15 @@ export class WasiHost {
         if (this._vfsExists(cwdCandidate) || this._vfsIsDir(cwdCandidate)) {
           return cwdCandidate;
         }
-        if (!clean.startsWith('include/') && !clean.startsWith('lib/') && !clean.startsWith('usr/') && !clean.startsWith('bin/')) {
+        if (!clean.startsWith('dev/') && !clean.startsWith('include/') && !clean.startsWith('lib/') && !clean.startsWith('usr/') && !clean.startsWith('bin/')) {
           return cwdCandidate;
         }
       }
     }
 
-    if (clean.startsWith('include/') || clean.startsWith('lib/') || clean.startsWith('usr/') || clean.startsWith('bin/')) {
+    if (clean.startsWith('dev/') || clean.startsWith('include/') || clean.startsWith('lib/') || clean.startsWith('usr/') || clean.startsWith('bin/')) {
       const rootCandidate = normalizePath(`/${clean}`);
-      if (this._vfsExists(rootCandidate) || this._vfsIsDir(rootCandidate)) {
+      if (clean === 'dev/null' || clean === 'dev/zero' || this._vfsExists(rootCandidate) || this._vfsIsDir(rootCandidate)) {
         return rootCandidate;
       }
     }
@@ -352,6 +352,13 @@ export class WasiHost {
         const file = this.openFiles.get(fd);
         if (!file) return EBADF;
 
+        if (file.isCharDev) {
+          this.memU8()[stat_out] = 2; // __WASI_FILETYPE_CHARACTER_DEVICE
+          this.memI64()[(stat_out + 8) >> 3] = ALL_RIGHTS;
+          this.memI64()[(stat_out + 16) >> 3] = ALL_RIGHTS;
+          return ESUCCESS;
+        }
+
         this.memU8()[stat_out] = file.isDir ? 3 : 4; // REGULAR_FILE = 4
         if (file.isAppend) {
           this.memU8()[stat_out + 2] = 1; // __WASI_FDFLAG_APPEND
@@ -407,7 +414,11 @@ export class WasiHost {
         this.memI64()[stat_out >> 3] = 1n; // dev
         this.memI64()[(stat_out + 8) >> 3] = this._getInode(file.path); // ino
 
-        if (file.isDir) {
+        if (file.isCharDev) {
+          this.memU8()[stat_out + 16] = 2; // CHARACTER_DEVICE
+          this.memI64()[(stat_out + 24) >> 3] = 1n;
+          this.memI64()[(stat_out + 32) >> 3] = 0n;
+        } else if (file.isDir) {
           this.memU8()[stat_out + 16] = 3;
           this.memI64()[(stat_out + 24) >> 3] = 1n;
           this.memI64()[(stat_out + 32) >> 3] = 0n;
@@ -446,6 +457,16 @@ export class WasiHost {
         this.memI64()[stat_out >> 3] = 1n; // dev
         this.memI64()[(stat_out + 8) >> 3] = this._getInode(fullPath); // ino
 
+        if (fullPath === '/dev/null' || fullPath === '/dev/zero') {
+          this.memU8()[stat_out + 16] = 2; // CHARACTER_DEVICE
+          this.memI64()[(stat_out + 24) >> 3] = 1n;
+          this.memI64()[(stat_out + 32) >> 3] = 0n;
+          this.memI64()[(stat_out + 40) >> 3] = nowNs;
+          this.memI64()[(stat_out + 48) >> 3] = nowNs;
+          this.memI64()[(stat_out + 56) >> 3] = nowNs;
+          return ESUCCESS;
+        }
+
         if (this._vfsIsDir(fullPath)) {
           this.memU8()[stat_out + 16] = 3; // DIRECTORY
           this.memI64()[(stat_out + 24) >> 3] = 1n;
@@ -481,6 +502,25 @@ export class WasiHost {
         const WASI_O_EXCL = 4;
         const WASI_O_TRUNC = 8;
         const WASI_FDFLAG_APPEND = 1;
+
+        if (fullPath === '/dev/null' || fullPath === '/dev/zero') {
+          if (oflags & WASI_O_DIRECTORY) return ENOTDIR;
+          const fd = this.nextFd++;
+          this.openFiles.set(fd, {
+            fd,
+            path: fullPath,
+            isCharDev: true,
+            isDevNull: fullPath === '/dev/null',
+            isDevZero: fullPath === '/dev/zero',
+            isDir: false,
+            canRead: true,
+            canWrite: true,
+            isAppend: false,
+            cursor: 0,
+          });
+          this.memU32()[opened_fd_ptr >> 2] = fd;
+          return ESUCCESS;
+        }
 
         if (oflags & WASI_O_DIRECTORY) {
           if (this._vfsIsDir(fullPath)) {
@@ -579,6 +619,24 @@ export class WasiHost {
 
         if (!file || file.isDir || !file.canRead) return EBADF;
 
+        if (file.isDevNull) {
+          this.memU32()[nread_out >> 2] = 0;
+          return ESUCCESS;
+        }
+
+        if (file.isDevZero) {
+          let totalRead = 0;
+          for (let i = 0; i < iovs_len; i++) {
+            const ptr = this.memU32()[(iovs >> 2) + i * 2];
+            const len = this.memU32()[(iovs >> 2) + i * 2 + 1];
+            if (len <= 0) continue;
+            this.memU8().fill(0, ptr, ptr + len);
+            totalRead += len;
+          }
+          this.memU32()[nread_out >> 2] = totalRead;
+          return ESUCCESS;
+        }
+
         const data = this._vfsReadFile(file.path);
         let totalRead = 0;
 
@@ -605,6 +663,25 @@ export class WasiHost {
       fd_pread: (fd, iovs, iovs_len, offset, nread_out) => {
         const file = this.openFiles.get(fd);
         if (!file || file.isDir || !file.canRead) return EBADF;
+
+        if (file.isDevNull) {
+          this.memU32()[nread_out >> 2] = 0;
+          return ESUCCESS;
+        }
+
+        if (file.isDevZero) {
+          let totalRead = 0;
+          for (let i = 0; i < iovs_len; i++) {
+            const bufPtr = this.memU32()[(iovs >> 2) + i * 2];
+            const bufLen = this.memU32()[(iovs >> 2) + i * 2 + 1];
+            if (bufLen <= 0) continue;
+            this.memU8().fill(0, bufPtr, bufPtr + bufLen);
+            totalRead += bufLen;
+          }
+          this.memU32()[nread_out >> 2] = totalRead;
+          return ESUCCESS;
+        }
+
         const data = this._vfsReadFile(file.path);
         let pos = Number(offset);
         let totalRead = 0;
@@ -648,6 +725,16 @@ export class WasiHost {
 
         if (!file || file.isDir || !file.canWrite) return EBADF;
 
+        if (file.isCharDev) {
+          let totalWritten = 0;
+          for (let i = 0; i < iovs_len; i++) {
+            const len = this.memU32()[(iovs >> 2) + i * 2 + 1];
+            if (len > 0) totalWritten += len;
+          }
+          this.memU32()[nwritten_out >> 2] = totalWritten;
+          return ESUCCESS;
+        }
+
         let data = this._vfsReadFile(file.path);
         let totalWritten = 0;
 
@@ -681,6 +768,16 @@ export class WasiHost {
         const file = this.openFiles.get(fd);
         if (!file || file.isDir || !file.canWrite) return EBADF;
 
+        if (file.isCharDev) {
+          let totalWritten = 0;
+          for (let i = 0; i < iovs_len; i++) {
+            const len = this.memU32()[(iovs >> 2) + i * 2 + 1];
+            if (len > 0) totalWritten += len;
+          }
+          this.memU32()[nwritten_out >> 2] = totalWritten;
+          return ESUCCESS;
+        }
+
         let data = this._vfsReadFile(file.path);
         let pos = Number(offset);
         let totalWritten = 0;
@@ -712,6 +809,11 @@ export class WasiHost {
         const file = this.openFiles.get(fd);
         if (!file || file.isDir) return EBADF;
 
+        if (file.isCharDev) {
+          this.memI64()[newoffset_out >> 3] = 0n;
+          return ESUCCESS;
+        }
+
         const data = this._vfsReadFile(file.path);
         const offNum = Number(offset);
         let target = file.cursor;
@@ -731,13 +833,17 @@ export class WasiHost {
       fd_tell: (fd, offset_out) => {
         const file = this.openFiles.get(fd);
         if (!file || file.isDir) return EBADF;
+        if (file.isCharDev) {
+          this.memI64()[offset_out >> 3] = 0n;
+          return ESUCCESS;
+        }
         this.memI64()[offset_out >> 3] = BigInt(file.cursor);
         return ESUCCESS;
       },
 
       fd_sync: (fd) => {
         const file = this.openFiles.get(fd);
-        if (file && this.onFileSync) {
+        if (file && !file.isCharDev && this.onFileSync) {
           const data = this._vfsReadFile(file.path);
           try { this.onFileSync(file.path, data); } catch {}
         }
