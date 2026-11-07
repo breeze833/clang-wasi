@@ -236,8 +236,9 @@ This repository eliminates `memfs.wasm` entirely in favor of **`src/wasi-host.js
 
 Releases are automated via GitHub Actions:
 
-* Pushing a version tag matching `v*` (e.g., `git tag v19.1.0 && git push origin v19.1.0`) triggers `.github/workflows/build-release.yml`.
-* The workflow compiles all modules in a clean runner and uploads the release artifacts (`llvm-box.wasm`, `sysroot.tar.gz`, and `clang-wasi-19.tar.gz`) to GitHub Releases.
+* Pushing a version tag matching `v*` (e.g., `git tag v19.1.0 && git push origin v19.1.0`) or manually triggering via `workflow_dispatch` initiates `.github/workflows/build-release.yml`.
+* Pushing to `main` does not build releases, avoiding unnecessary long compilation cycles.
+* The workflow compiles the modules, executes verification test suites (`npm test` and `./scripts/test.sh`), uploads release assets (`llvm-box.wasm`, `sysroot.tar.gz`, `dist/wasi-host.js`, and `clang-wasi-19.tar.gz`), and automatically switches the `latest` tag to the newest build so that the source zip is always updated to the latest release.
 
 ---
 

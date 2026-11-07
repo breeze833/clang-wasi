@@ -2,17 +2,12 @@ name: Build and Release WASI Toolchain
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Git release tag to create (e.g. v19.1.0). If empty, build and test only.'
+        description: 'Git release tag to create (e.g. v19.1.0). Leave empty to use package.json version.'
         required: false
         type: string
         default: ''
@@ -57,6 +52,7 @@ jobs:
 
       - name: Run Test Suite
         run: |
+          npm test
           chmod +x scripts/test.sh scripts/wasi-run.js
           ./scripts/test.sh
 
@@ -71,50 +67,26 @@ jobs:
             clang-wasi-19.tar.gz
           if-no-files-found: error
 
-      - name: Reset Rolling Tag 'latest'
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Determine Release Tag
+        id: vars
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          gh release delete latest --cleanup-tag --yes || true
-          git push origin :refs/tags/latest 2>/dev/null || true
-          git tag -d latest 2>/dev/null || true
-          sleep 2
-          git tag -f latest
-          git push --force origin latest
+          if [ -n "${{ inputs.release_tag }}" ]; then
+            TAG="${{ inputs.release_tag }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+            TAG="v${VERSION}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Release tag: ${TAG}"
 
-      - name: Publish Latest Pre-release (Push to main)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Publish Versioned Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
+          tag_name: ${{ steps.vars.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          name: "clang-wasi latest (rolling build)"
-          body: |
-            Automated continuous build from commit `${{ github.sha }}` on `main`.
-
-            ### 📦 Downloadable Assets:
-            - **`llvm-box.wasm`**: Single unified multicall driver binary (`clang`, `clang++`, `wasm-ld`, `lld`, `llvm-ar`, `llvm-nm`, etc.)
-            - **`sysroot.tar.gz`**: Complete standalone sysroot archive containing standard C/C++ headers and static libraries
-            - **`dist/wasi-host.js`**: Standalone zero-dependency pure JavaScript WASI Preview 1 host
-            - **`clang-wasi-19.tar.gz`**: Distribution archive bundling toolchain components
-          prerelease: true
-          files: |
-            dist/llvm-box.wasm
-            dist/sysroot.tar.gz
-            dist/wasi-host.js
-            clang-wasi-19.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish Versioned Release (Git Tag or Dispatch)
-        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.release_tag || github.ref_name }}
-          name: ${{ inputs.release_tag || github.ref_name }}
+          name: ${{ steps.vars.outputs.tag }}
           draft: ${{ inputs.draft || false }}
           prerelease: ${{ inputs.prerelease || false }}
           generate_release_notes: true
@@ -126,4 +98,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-
+      - name: Switch 'latest' tag to newest build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f latest "${{ github.sha }}"
+          git push --force origin refs/tags/latest
