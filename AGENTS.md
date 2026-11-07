@@ -79,3 +79,4 @@ This repository eliminates `memfs.wasm` entirely in favor of `src/wasi-host.js`:
 - `examples/wasi-host-run.js`: Standalone runner compiling, linking, and running C code in memory.
 - `scripts/test-wasi-host.js`: Automated verification test suite for C and C++ toolchain operations.
 - `npm test`: Executes both `examples/host-reference.js` and `scripts/test-wasi-host.js`.
+- `npm run pack`: Packages standalone npm distribution tarball (`dist/clang-wasi-19.1.0.tgz`).

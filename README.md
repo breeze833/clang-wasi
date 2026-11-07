@@ -238,7 +238,25 @@ Releases are automated via GitHub Actions:
 
 * Pushing a version tag matching `v*` (e.g., `git tag v19.1.0 && git push origin v19.1.0`) or manually triggering via `workflow_dispatch` initiates `.github/workflows/build-release.yml`.
 * Pushing to `main` does not build releases, avoiding unnecessary long compilation cycles.
-* The workflow compiles the modules, executes verification test suites (`npm test` and `./scripts/test.sh`), uploads release assets (`llvm-box.wasm`, `sysroot.tar.gz`, `dist/wasi-host.js`, and `clang-wasi-19.tar.gz`), and automatically switches the `latest` tag to the newest build so that the source zip is always updated to the latest release.
+* The workflow compiles the modules, executes verification test suites (`npm test` and `./scripts/test.sh`), packages the standalone npm distribution tarball (`dist/clang-wasi-19.1.0.tgz`), uploads release assets (`llvm-box.wasm`, `sysroot.tar.gz`, `dist/wasi-host.js`, `clang-wasi-19.1.0.tgz`, and `clang-wasi-19.tar.gz`), and automatically switches the `latest` tag to the newest build.
+
+### Downstream Integration via NPM
+
+Downstream projects (e.g. `wasm-c-ide`) can directly install the published npm package tarball from GitHub Releases:
+
+```json
+{
+  "dependencies": {
+    "clang-wasi": "https://github.com/breeze833/clang-wasi/releases/download/latest/clang-wasi-19.1.0.tgz"
+  }
+}
+```
+
+And import `WasiHost` directly in JavaScript/TypeScript without copying files:
+
+```javascript
+import { WasiHost, ProcExit, normalizePath, ESUCCESS } from 'clang-wasi/host';
+```
 
 ---
 

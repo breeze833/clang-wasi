@@ -11,10 +11,13 @@
  *   node examples/wasi-host-run.js
  */
 
-const fs = require('fs');
-const path = require('path');
-const zlib = require('zlib');
-const { WasiHost, ProcExit } = require('../src/wasi-host.js');
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+import { WasiHost, ProcExit } from '../src/wasi-host.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Simple Tar reader for sysroot.tar.gz
 class SimpleTar {

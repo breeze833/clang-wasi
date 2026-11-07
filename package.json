@@ -2,12 +2,26 @@
   "name": "clang-wasi",
   "version": "19.1.0",
   "description": "Standalone LLVM 19, Clang, and LLD WebAssembly binaries for wasm32-wasip1 with Pure JavaScript WASI Host",
-  "main": "src/wasi-host.js",
+  "type": "module",
+  "main": "./src/wasi-host.js",
+  "exports": {
+    ".": "./src/wasi-host.js",
+    "./host": "./src/wasi-host.js"
+  },
+  "files": [
+    "src/wasi-host.js",
+    "dist/wasi-host.js",
+    "docs/HOST_FUNCTIONS.md",
+    "README.md",
+    "SPEC.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "node examples/host-reference.js && node scripts/test-wasi-host.js",
     "test:reference": "node examples/host-reference.js",
     "test:wasi-host": "node scripts/test-wasi-host.js",
-    "run:reference": "node examples/host-reference.js"
+    "run:reference": "node examples/host-reference.js",
+    "pack": "npm pack --pack-destination dist/"
   },
   "keywords": [
     "llvm",

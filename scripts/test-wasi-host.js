@@ -1,9 +1,12 @@
 #!/usr/bin/env node
-const fs = require('fs');
-const path = require('path');
-const zlib = require('zlib');
-const assert = require('assert');
-const { WasiHost, ProcExit } = require('../src/wasi-host.js');
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import assert from 'node:assert';
+import { fileURLToPath } from 'node:url';
+import { WasiHost, ProcExit } from '../src/wasi-host.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function readStr(u8, offset, len = -1) {
   let str = '';

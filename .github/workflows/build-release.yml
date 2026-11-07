@@ -56,6 +56,10 @@ jobs:
           chmod +x scripts/test.sh scripts/wasi-run.js
           ./scripts/test.sh
 
+      - name: Package npm distribution tarball
+        run: |
+          npm run pack
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -64,6 +68,7 @@ jobs:
             dist/llvm-box.wasm
             dist/sysroot.tar.gz
             dist/wasi-host.js
+            dist/*.tgz
             clang-wasi-19.tar.gz
           if-no-files-found: error
 
@@ -94,6 +99,7 @@ jobs:
             dist/llvm-box.wasm
             dist/sysroot.tar.gz
             dist/wasi-host.js
+            dist/*.tgz
             clang-wasi-19.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

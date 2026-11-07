@@ -12,11 +12,14 @@
  *   node examples/host-reference.js
  */
 
-const fs = require('fs');
-const path = require('path');
-const zlib = require('zlib');
-const assert = require('assert');
-const { WasiHost, ProcExit, normalizePath, ESUCCESS } = require('../src/wasi-host.js');
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import assert from 'node:assert';
+import { fileURLToPath } from 'node:url';
+import { WasiHost, ProcExit, normalizePath, ESUCCESS } from '../src/wasi-host.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Minimal in-memory Tar extractor for sysroot.tar.gz
@@ -365,7 +368,7 @@ int main() {
 }
 
 // Module exports for external integrators (e.g. wasm-c-ide)
-module.exports = {
+export {
   WasiHost,
   ProcExit,
   normalizePath,
@@ -379,7 +382,7 @@ module.exports = {
 };
 
 // Direct CLI invocation self-verification
-if (require.main === module) {
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   runSelfTests().catch(err => {
     console.error('[-] Self-test error:', err);
     process.exit(1);

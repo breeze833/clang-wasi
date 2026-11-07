@@ -234,7 +234,35 @@ try {
 
 ---
 
-## 5. Verification & Testing Standards
+## 5. NPM Package Distribution & Modular Exports
+
+To enable seamless, modular integration into downstream web applications and browser IDEs (such as `wasm-c-ide`) without code copying or vendor fragmentation, `clang-wasi` publishes a standalone npm package tarball (`clang-wasi-<version>.tgz`) to GitHub Releases alongside raw toolchain archives.
+
+### 5.1 Package Metadata & Exports Contract (`package.json`)
+The npm package is configured as an ES module providing dedicated entry points:
+- **`"type": "module"`**
+- **Root Entry Point (`.` / `"main"`)**: Maps to `./src/wasi-host.js`.
+- **Dedicated Subpath Export (`./host`)**: Explicitly exports `./src/wasi-host.js` for clean subpath imports:
+  ```javascript
+  import { WasiHost, ProcExit, normalizePath, ESUCCESS } from 'clang-wasi/host';
+  ```
+- **Included Files**: Strictly scoped to runtime files and technical documentation:
+  - `src/wasi-host.js`: Pure JavaScript WASI Preview 1 host implementation.
+  - `dist/wasi-host.js`: Release copy of the host implementation.
+  - `docs/HOST_FUNCTIONS.md`: Technical specification of WASI Preview 1 host contract and data structures.
+  - `README.md`, `LICENSE`, `SPEC.md`.
+
+### 5.2 Release Distribution Pipeline
+During release packaging, `npm pack --pack-destination dist/` generates `dist/clang-wasi-<version>.tgz`, which is published to GitHub Releases for direct URL dependency resolution:
+```json
+"dependencies": {
+  "clang-wasi": "https://github.com/breeze833/clang-wasi/releases/download/latest/clang-wasi-19.1.0.tgz"
+}
+```
+
+---
+
+## 6. Verification & Testing Standards
 
 To maintain compatibility with upstream LLVM, WASI Preview 1, and downstream consumers (such as `wasm-c-ide`), all modifications must pass the test suite:
 

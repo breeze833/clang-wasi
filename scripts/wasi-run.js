@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-const fs = require('fs');
-const { WASI } = require('node:wasi');
+import fs from 'node:fs';
+import { WASI } from 'node:wasi';
 
 // Suppress experimental WASI warning
 process.removeAllListeners('warning');
