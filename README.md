@@ -29,11 +29,15 @@ clang-wasi/
 │   ├── build.sh                # Main two-stage cross-compilation pipeline
 │   ├── test.sh                 # Verification test suite (C & C++)
 │   ├── test-wasi-host.js       # In-memory VFS and compiler verification test suite
+│   ├── test-driver.js          # High-level CLI driver & toolchain test suite
 │   ├── wasi-run.js             # Node.js WASI test runner helper
 │   └── patches/
 │       └── llvm-wasi-19.1.0.patch # Version-specific WASI compatibility patch
 ├── src/
-│   └── wasi-host.js            # Standalone zero-dependency pure JS WASI Preview 1 host
+│   ├── index.js                # Unified package entry point
+│   ├── wasi-host.js            # Standalone zero-dependency pure JS WASI Preview 1 host
+│   ├── driver.js               # High-level CLI compiler driver (parseCompilerArgs, executeGccCommand, etc.)
+│   └── toolchain.js            # High-level toolchain coordinator (WasmToolchain, AppInstance)
 ├── examples/
 │   ├── host-reference.js       # Production-grade reference runner with self-verification
 │   └── wasi-host-run.js        # Standalone in-memory C compilation & execution example
@@ -252,10 +256,56 @@ Downstream projects (e.g. `wasm-c-ide`) can directly install the published npm p
 }
 ```
 
-And import `WasiHost` directly in JavaScript/TypeScript without copying files:
+#### Subpath Imports
 
 ```javascript
+// 1. Unified package import
+import { WasiHost, WasmToolchain, executeGccCommand, executeToolCommand } from 'clang-wasi';
+
+// 2. Or import dedicated subpaths:
 import { WasiHost, ProcExit, normalizePath, ESUCCESS } from 'clang-wasi/host';
+import { parseCompilerArgs, executeGccCommand, executeLdCommand, executeToolCommand } from 'clang-wasi/driver';
+import { WasmToolchain, AppInstance } from 'clang-wasi/toolchain';
+```
+
+#### High-Level CLI Driver Usage
+
+```javascript
+import { WasmToolchain, executeGccCommand, executeToolCommand } from 'clang-wasi';
+
+// Initialize toolchain with VFS (supports in-memory Map or vfs-wasi OverlayVFS)
+const toolchain = new WasmToolchain({ vfs });
+await toolchain.init();
+
+// Compile C code to an object file (-c)
+await executeGccCommand({
+  cmd: 'gcc',
+  args: ['-c', 'main.c', '-o', 'main.o'],
+  cwd: '/workspace',
+  vfs,
+  toolchain,
+  write: str => process.stdout.write(str),
+});
+
+// Create static library archive using bundled ar utility
+await executeToolCommand({
+  cmd: 'ar',
+  args: ['rcs', 'libmath.a', 'math.o'],
+  cwd: '/workspace',
+  vfs,
+  toolchain,
+  write: str => process.stdout.write(str),
+});
+
+// Full compilation & linkage into WebAssembly executable
+await executeGccCommand({
+  cmd: 'gcc',
+  args: ['main.c', 'libmath.a', '-o', 'app.wasm'],
+  cwd: '/workspace',
+  vfs,
+  toolchain,
+  write: str => process.stdout.write(str),
+});
 ```
 
 ---

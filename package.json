@@ -3,13 +3,18 @@
   "version": "19.1.0",
   "description": "Standalone LLVM 19, Clang, and LLD WebAssembly binaries for wasm32-wasip1 with Pure JavaScript WASI Host",
   "type": "module",
-  "main": "./src/wasi-host.js",
+  "main": "./src/index.js",
   "exports": {
-    ".": "./src/wasi-host.js",
-    "./host": "./src/wasi-host.js"
+    ".": "./src/index.js",
+    "./host": "./src/wasi-host.js",
+    "./driver": "./src/driver.js",
+    "./toolchain": "./src/toolchain.js"
   },
   "files": [
+    "src/index.js",
     "src/wasi-host.js",
+    "src/driver.js",
+    "src/toolchain.js",
     "dist/wasi-host.js",
     "docs/HOST_FUNCTIONS.md",
     "README.md",
@@ -17,9 +22,10 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node examples/host-reference.js && node scripts/test-wasi-host.js",
+    "test": "node examples/host-reference.js && node scripts/test-wasi-host.js && node scripts/test-driver.js",
     "test:reference": "node examples/host-reference.js",
     "test:wasi-host": "node scripts/test-wasi-host.js",
+    "test:driver": "node scripts/test-driver.js",
     "run:reference": "node examples/host-reference.js",
     "pack": "npm pack --pack-destination dist/"
   },

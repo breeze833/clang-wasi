@@ -74,9 +74,22 @@ This repository eliminates `memfs.wasm` entirely in favor of `src/wasi-host.js`:
 
 ### Reference Files and Scripts:
 - `docs/HOST_FUNCTIONS.md`: Authoritative technical specification for WASI Preview 1 host functions, signatures, and DataView memory layouts.
+- `src/index.js`: Unified package entry point re-exporting host, driver, and toolchain modules.
 - `src/wasi-host.js`: Standalone pure WASI Preview 1 Host implementation backed by in-memory VFS.
+- `src/driver.js`: High-level GCC/Clang CLI driver and argument parser (`parseCompilerArgs`, `executeGccCommand`, `executeLdCommand`, `executeToolCommand`).
+- `src/toolchain.js`: High-level WebAssembly toolchain coordinator (`WasmToolchain`, `AppInstance`).
 - `examples/host-reference.js`: Standalone zero-dependency reference runner with modular exports and integrated self-verification.
 - `examples/wasi-host-run.js`: Standalone runner compiling, linking, and running C code in memory.
 - `scripts/test-wasi-host.js`: Automated verification test suite for C and C++ toolchain operations.
-- `npm test`: Executes both `examples/host-reference.js` and `scripts/test-wasi-host.js`.
+- `scripts/test-driver.js`: Automated verification test suite for compiler driver and multicall utilities.
+- `npm test`: Executes `examples/host-reference.js`, `scripts/test-wasi-host.js`, and `scripts/test-driver.js`.
 - `npm run pack`: Packages standalone npm distribution tarball (`dist/clang-wasi-19.1.0.tgz`).
+
+---
+
+## 8. High-Level Compiler Driver & Toolchain Architecture
+
+To enable zero-duplication integration across downstream WebAssembly environments (such as `wasm-c-ide` or CLI runners), `clang-wasi` provides a decoupled, high-level toolchain coordinator and driver:
+1. **Generic & Unopinionated**: The driver does NOT force pedagogical or IDE-specific flags (e.g. `-pedantic-errors`, `-Wall`, `-Wextra`). Flag enforcement is left strictly to the user or calling environment.
+2. **VFS Polymorphism**: Driver functions transparently support both basic JavaScript `Map` objects and advanced multi-tier virtual filesystems (`vfs-wasi` overlay VFS).
+3. **Subpath Exports**: Consumers can import `clang-wasi` (all modules), `clang-wasi/host` (pure WASI host), `clang-wasi/driver` (CLI command executors), or `clang-wasi/toolchain` (WasmToolchain coordinator).

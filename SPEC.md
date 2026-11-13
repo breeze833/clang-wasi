@@ -252,13 +252,25 @@ To enable seamless, modular integration into downstream web applications and bro
 ### 5.1 Package Metadata & Exports Contract (`package.json`)
 The npm package is configured as an ES module providing dedicated entry points:
 - **`"type": "module"`**
-- **Root Entry Point (`.` / `"main"`)**: Maps to `./src/wasi-host.js`.
-- **Dedicated Subpath Export (`./host`)**: Explicitly exports `./src/wasi-host.js` for clean subpath imports:
-  ```javascript
-  import { WasiHost, ProcExit, normalizePath, ESUCCESS } from 'clang-wasi/host';
-  ```
+- **Root Entry Point (`.` / `"main"`)**: Maps to `./src/index.js`, providing unified exports for host, driver, and toolchain coordinator.
+- **Dedicated Subpath Exports**:
+  - **`./host`**: Explicitly exports `./src/wasi-host.js` for standalone WASI Preview 1 host integration:
+    ```javascript
+    import { WasiHost, ProcExit, normalizePath, ESUCCESS } from 'clang-wasi/host';
+    ```
+  - **`./driver`**: Explicitly exports `./src/driver.js` for CLI compiler argument parsing and pipeline execution:
+    ```javascript
+    import { parseCompilerArgs, executeGccCommand, executeLdCommand, executeToolCommand } from 'clang-wasi/driver';
+    ```
+  - **`./toolchain`**: Explicitly exports `./src/toolchain.js` for high-level `llvm-box.wasm` execution coordination:
+    ```javascript
+    import { WasmToolchain, AppInstance } from 'clang-wasi/toolchain';
+    ```
 - **Included Files**: Strictly scoped to runtime files and technical documentation:
+  - `src/index.js`: Unified exports for host, driver, and toolchain.
   - `src/wasi-host.js`: Pure JavaScript WASI Preview 1 host implementation.
+  - `src/driver.js`: High-level GCC/Clang CLI argument parser and execution pipeline.
+  - `src/toolchain.js`: High-level `llvm-box.wasm` WasmToolchain and AppInstance coordinator.
   - `dist/wasi-host.js`: Release copy of the host implementation.
   - `docs/HOST_FUNCTIONS.md`: Technical specification of WASI Preview 1 host contract and data structures.
   - `README.md`, `LICENSE`, `SPEC.md`.
@@ -293,3 +305,51 @@ To maintain compatibility with upstream LLVM, WASI Preview 1, and downstream con
    npm test
    ```
    Must complete with zero errors and exit code 0.
+
+---
+
+## 7. High-Level Compiler Driver & Toolchain Subsystem
+
+To eliminate duplicate driver logic across downstream WebAssembly development environments, `clang-wasi` includes a high-level compiler driver and toolchain coordinator (`src/driver.js` and `src/toolchain.js`).
+
+### 7.1 Compiler Argument Parser (`parseCompilerArgs`)
+`parseCompilerArgs(args, cwd = '/workspace')` parses GCC and Clang CLI invocations and separates options into structured stages:
+- **Compilation Stages**:
+  - `-E`: Preprocessor only (`stage = 'preprocess'`).
+  - `-S`: Assembly generation only (`stage = 'assembly'`).
+  - `-c`: Object compilation only (`stage = 'compile'`).
+  - Default: Full compilation and linking pipeline (`stage = null`).
+- **File Segregation**:
+  - **Sources**: Files matching `.c`, `.cpp`, `.cc`, `.cxx`, `.c++`.
+  - **Objects**: Files matching `.o`, `.a`, `.so`.
+- **Flag Categorization**:
+  - Compiler flags: `-I<dir>`, `-D<macro>`, `-U<macro>`, `-O0`–`-O3`, `-Os`, `-Wall`, `-Wextra`, `-Werror`, `-pedantic-errors`, `-std=...`, `-v`.
+  - Linker flags: `-L<dir>`, `-l<name>`, `-Wl,...`, `-shared`, `--shared`.
+  - Output file: `-o <file>` or `-o<file>`.
+
+### 7.2 High-Level Execution Pipelines (`src/driver.js`)
+- **`executeGccCommand({ cmd, args, cwd, environ, vfs, toolchain, mode, write })`**:
+  - Implements the complete multi-phase compilation and linkage workflow.
+  - Automatically identifies C mode (`mode: 'c'`, default `-std=c17`) or C++ mode (`mode: 'cpp'`, default `-std=c++17`).
+  - Does NOT enforce IDE-specific or pedagogical flags (such as `-pedantic-errors`, `-Wall`, or `-Wextra`); warning levels and pedantic enforcement remain strictly user-configurable via command arguments.
+  - Validates source and object presence in VFS before executing to emit clean GCC-style diagnostics.
+  - If compiling only (`-c`), compiles each source directly to `.o`.
+  - If linking, compiles sources to intermediate `.o` files in VFS and invokes `wasm-ld` automatically linking standard runtimes (`-lc`, `-lclang_rt.builtins`, `-lc++`, `-lc++abi`), runtime search directories (`/lib/wasm32-wasip1`, `/usr/lib`), and designated output binaries.
+- **`executeLdCommand({ cmd, args, cwd, environ, vfs, toolchain, write })`**:
+  - Invokes `wasm-ld` directly for explicit linker invocations.
+- **`executeToolCommand({ cmd, args, cwd, environ, vfs, toolchain, write })`**:
+  - Dispatches LLVM multicall utilities (`ar`, `ranlib`, `nm`, `objdump`, `size`, `strings`, `cxxfilt`, `readobj`) directly through `llvm-box.wasm`.
+
+### 7.3 Wasm Toolchain Coordinator (`src/toolchain.js`)
+- **`AppInstance`**:
+  - Manages WebAssembly instance lifecycle, connects `WasiHost` imports, provides dynamic linear memory binding via `wasiHost.setMemory(() => instance.exports.memory)`, invokes `instance.exports._start()`, and catches `ProcExit`.
+- **`WasmToolchain`**:
+  - Loads and caches `llvm-box.wasm` WebAssembly module.
+  - Provides core operations:
+    - `runClang(cmd, args, options)`: passes `--target=wasm32-wasip1` and `--sysroot=/`.
+    - `runLld(cmd, args, options)`: passes default stack sizes, sysroot search paths, and library linkages.
+    - `runTool(toolName, args, options)`: runs any multicall tool applet.
+    - `compile(sourcePath, objPath, mode, customFlags, options)`.
+    - `link(objPaths, outputPath, customFlags, options)`.
+    - `syncFile`, `getFile`, `hasFile`, `removeFile`: handles VFS synchronization.
+
