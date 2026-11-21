@@ -63,19 +63,19 @@ The build pipeline consists of two stages followed by community-compatible packa
 
 ## 7. Pure JavaScript WasiHost & Direct VFS Architecture
 
-This repository eliminates `memfs.wasm` entirely in favor of `src/wasi-host.js`: a zero-dependency, pure JavaScript WASI Preview 1 host directly backed by an in-memory `Map` or Virtual File System (VFS).
+This repository eliminates `memfs.wasm` entirely by delegating WASI Preview 1 hosting to the standalone [`wasi-host`](https://github.com/breeze833/wasi-host) package (with `src/wasi-host.js` preserved as a backward-compatibility re-export): a pure JavaScript WASI Preview 1 host directly backed by an in-memory `Map` or Virtual File System (`vfs-wasi` `OverlayVFS`).
 
 ### Advantages over MemFS:
 1. **Zero Double-Buffering:** Files reside directly in JavaScript `Uint8Array` memory; no synchronization or bidirectional mirroring between JavaScript VFS and a secondary Wasm linear memory is needed.
 2. **Unified Architecture:** The same `WasiHost` runs compiler tools (`llvm-box.wasm`) and user-compiled binaries without separate runtimes.
 3. **No 16MB or Inode Table Limits:** File allocation and directory hierarchy scale dynamically with available JavaScript heap.
 4. **Pedagogical and Browser Friendly:** Works identically in Node.js and browser Web Workers (with support for `SharedArrayBuffer` synchronous `Atomics.wait` stdin).
-5. **Pure WASI Preview 1 Invariant:** Toolchain batch execution requires pure WASI Preview 1 + VFS. Foreign shell hooks (`__host_winsize`, `__host_pipe`, `__host_dup`, `wasi_host_spawn`) are decoupled and removed from `src/wasi-host.js`.
+5. **Pure WASI Preview 1 Invariant:** Toolchain batch execution requires pure WASI Preview 1 + VFS. Foreign shell hooks (`__host_winsize`, `__host_pipe`, `__host_dup`, `wasi_host_spawn`) are decoupled from `wasi-host`.
 
 ### Reference Files and Scripts:
 - `docs/HOST_FUNCTIONS.md`: Authoritative technical specification for WASI Preview 1 host functions, signatures, and DataView memory layouts.
-- `src/index.js`: Unified package entry point re-exporting host, driver, and toolchain modules.
-- `src/wasi-host.js`: Standalone pure WASI Preview 1 Host implementation backed by in-memory VFS.
+- `src/index.js`: Unified package entry point re-exporting host (`wasi-host`), driver, and toolchain modules.
+- `src/wasi-host.js`: Compatibility re-export of the standalone `wasi-host` package.
 - `src/driver.js`: High-level GCC/Clang CLI driver and argument parser (`parseCompilerArgs`, `executeGccCommand`, `executeLdCommand`, `executeToolCommand`).
 - `src/toolchain.js`: High-level WebAssembly toolchain coordinator (`WasmToolchain`, `AppInstance`).
 - `examples/host-reference.js`: Standalone zero-dependency reference runner with modular exports and integrated self-verification.
@@ -83,7 +83,7 @@ This repository eliminates `memfs.wasm` entirely in favor of `src/wasi-host.js`:
 - `scripts/test-wasi-host.js`: Automated verification test suite for C and C++ toolchain operations.
 - `scripts/test-driver.js`: Automated verification test suite for compiler driver and multicall utilities.
 - `npm test`: Executes `examples/host-reference.js`, `scripts/test-wasi-host.js`, and `scripts/test-driver.js`.
-- `npm run pack`: Packages standalone npm distribution tarball (`dist/clang-wasi-19.1.0.tgz`).
+- `npm run pack`: Packages standalone npm distribution tarball (`dist/clang-wasi-19.1.0-build1.tgz`).
 
 ---
 

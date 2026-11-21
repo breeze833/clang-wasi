@@ -4,7 +4,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import assert from 'node:assert';
 import { fileURLToPath } from 'node:url';
-import { WasiHost, ProcExit } from '../src/wasi-host.js';
+import { WasiHost, ProcExit } from 'wasi-host';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -244,7 +244,7 @@ int main(void) {
   console.log('[+] C linking succeeded -> /workspace/hello.wasm');
 
   // Run
-  const helloWasm = clangHost._vfsReadFile('/workspace/hello.wasm');
+  const helloWasm = vfs.get('/workspace/hello.wasm');
   const helloModule = await WebAssembly.compile(helloWasm);
   let runOutput = '';
   const runHost = new WasiHost({
@@ -355,7 +355,7 @@ int main() {
   console.log('[+] C++ linking succeeded -> /workspace/hello_cpp.wasm');
 
   // Run C++
-  const helloCppWasm = clangCppHost._vfsReadFile('/workspace/hello_cpp.wasm');
+  const helloCppWasm = vfs.get('/workspace/hello_cpp.wasm');
   const helloCppModule = await WebAssembly.compile(helloCppWasm);
   let cppRunOutput = '';
   const runCppHost = new WasiHost({

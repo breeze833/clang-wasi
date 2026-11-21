@@ -1,6 +1,6 @@
 {
   "name": "clang-wasi",
-  "version": "19.1.0",
+  "version": "19.1.0-build1",
   "description": "Standalone LLVM 19, Clang, and LLD WebAssembly binaries for wasm32-wasip1 with Pure JavaScript WASI Host",
   "type": "module",
   "main": "./src/index.js",
@@ -15,12 +15,14 @@
     "src/wasi-host.js",
     "src/driver.js",
     "src/toolchain.js",
-    "dist/wasi-host.js",
     "docs/HOST_FUNCTIONS.md",
     "README.md",
     "SPEC.md",
     "LICENSE"
   ],
+  "dependencies": {
+    "wasi-host": "https://github.com/breeze833/wasi-host/releases/download/latest/wasi-host-0.1.0.tgz"
+  },
   "scripts": {
     "test": "node examples/host-reference.js && node scripts/test-wasi-host.js && node scripts/test-driver.js",
     "test:reference": "node examples/host-reference.js",

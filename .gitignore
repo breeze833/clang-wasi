@@ -10,3 +10,6 @@ llvm-project/
 
 # Distribution archives
 *.tar.gz
+
+# Node dependencies
+node_modules/

@@ -17,7 +17,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import assert from 'node:assert';
 import { fileURLToPath } from 'node:url';
-import { WasiHost, ProcExit, normalizePath, ESUCCESS } from '../src/wasi-host.js';
+import { WasiHost, ProcExit, normalizePath, ESUCCESS } from 'wasi-host';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

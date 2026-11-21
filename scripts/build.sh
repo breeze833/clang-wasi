@@ -197,11 +197,8 @@ else
 fi
 
 # Clean up any legacy unbundled lib directory or uncompressed sysroot tar in dist
-rm -rf dist/lib
+rm -rf dist/lib dist/wasi-host.js
 rm -f dist/sysroot.tar
-
-# Copy standalone WasiHost runtime into dist
-cp src/wasi-host.js dist/wasi-host.js
 
 # Enforce uniform directory and file permissions
 chmod 755 dist

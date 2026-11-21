@@ -35,7 +35,7 @@ clang-wasi/
 │       └── llvm-wasi-19.1.0.patch # Version-specific WASI compatibility patch
 ├── src/
 │   ├── index.js                # Unified package entry point
-│   ├── wasi-host.js            # Standalone zero-dependency pure JS WASI Preview 1 host
+│   ├── wasi-host.js            # Compatibility re-export of standalone wasi-host package
 │   ├── driver.js               # High-level CLI compiler driver (parseCompilerArgs, executeGccCommand, etc.)
 │   └── toolchain.js            # High-level toolchain coordinator (WasmToolchain, AppInstance)
 ├── examples/
@@ -43,8 +43,7 @@ clang-wasi/
 │   └── wasi-host-run.js        # Standalone in-memory C compilation & execution example
 ├── dist/                       # Build output artifacts (generated)
 │   ├── llvm-box.wasm           # Single multicall binary (clang, clang++, wasm-ld, ar, nm, etc.)
-│   ├── sysroot.tar.gz          # Standalone C/C++ sysroot archive
-│   └── wasi-host.js            # Packaged WASI host module
+│   └── sysroot.tar.gz          # Standalone C/C++ sysroot archive
 ├── package.json                # NPM test runner and package metadata
 ├── SPEC.md                    # Technical specification & architectural ground truth
 ├── AGENTS.md                   # Development rules and platform constraints
@@ -133,12 +132,12 @@ wasmtime run \
 
 ---
 
-### 2. Recommended: Pure JavaScript WasiHost (Zero-Dependency In-Memory VFS)
+### 2. Recommended: Pure JavaScript WasiHost (`wasi-host` + In-Memory VFS)
 
-This repository includes a standalone, production-ready WASI Preview 1 host in `src/wasi-host.js` that directly bridges `llvm-box.wasm` and user binaries with an in-memory `Map` or Virtual File System (VFS) without needing `memfs.wasm` or third-party shims:
+`clang-wasi` integrates with the standalone [`wasi-host`](https://github.com/breeze833/wasi-host) WASI Preview 1 host package (also re-exported at `clang-wasi/host` for compatibility) to bridge `llvm-box.wasm` and user binaries directly with an in-memory `Map` or `vfs-wasi` `OverlayVFS` without `memfs.wasm`:
 
 ```javascript
-import { WasiHost } from './src/wasi-host.js';
+import { WasiHost } from 'wasi-host'; // or 'clang-wasi/host'
 
 // 1. Prepare in-memory file map
 const vfs = new Map();
@@ -227,9 +226,9 @@ Historically, projects like `binji/wasm-clang` (2019) relied on a compiled `memf
 * **Double-buffering & Memory Duplication**: Every file had to be copied into `memfs.wasm`'s memory before Clang could read it, and copied back out to JavaScript after compilation.
 * **ABI & Inode Limitations**: Legacy MemFS suffered from 32-bit `nlink` mismatches, seek whence inversion, hardcoded 1024-inode limits, and unlinking bugs.
 
-This repository eliminates `memfs.wasm` entirely in favor of **`src/wasi-host.js`**:
-* **Direct JavaScript Memory**: Files reside directly in standard JavaScript `Map` or `Uint8Array` memory without Wasm linear memory copying.
-* **Zero Dependencies**: Standard WASI Preview 1 ABI implementation running out of the box in Node.js and modern browser environments.
+This repository eliminates `memfs.wasm` entirely by running over **[`wasi-host`](https://github.com/breeze833/wasi-host)**:
+* **Direct JavaScript Memory**: Files reside directly in standard JavaScript `Map`, `OverlayVFS`, or `Uint8Array` memory without Wasm linear memory copying.
+* **Decoupled WASI Core**: WASI Preview 1 syscall hosting lives in the language-neutral `wasi-host` package (with `src/wasi-host.js` preserved as a compatibility re-export).
 * **Pure WASI Preview 1 Contract**: Operates strictly via standard WASI Preview 1 (`wasi_snapshot_preview1`) and in-memory VFS scatter/gather operations. Decouples foreign BusyBox-specific shell hooks, ensuring clean single-threaded toolchain execution.
 * **Authoritative Specification & Reference Runner**: Fully defined in `docs/HOST_FUNCTIONS.md` and verified in `examples/host-reference.js`.
 * **Dynamic Scale**: File sizes and directories scale naturally with the host JavaScript engine without fixed inode table limits.
@@ -240,9 +239,9 @@ This repository eliminates `memfs.wasm` entirely in favor of **`src/wasi-host.js
 
 Releases are automated via GitHub Actions:
 
-* Pushing a version tag matching `v*` (e.g., `git tag v19.1.0 && git push origin v19.1.0`) or manually triggering via `workflow_dispatch` initiates `.github/workflows/build-release.yml`.
+* Pushing a version tag matching `v*` (e.g., `git tag v19.1.0-build1 && git push origin v19.1.0-build1`) or manually triggering via `workflow_dispatch` initiates `.github/workflows/build-release.yml`.
 * Pushing to `main` does not build releases, avoiding unnecessary long compilation cycles.
-* The workflow compiles the modules, executes verification test suites (`npm test` and `./scripts/test.sh`), packages the standalone npm distribution tarball (`dist/clang-wasi-19.1.0.tgz`), uploads release assets (`llvm-box.wasm`, `sysroot.tar.gz`, `dist/wasi-host.js`, `clang-wasi-19.1.0.tgz`, and `clang-wasi-19.tar.gz`), and automatically switches the `latest` tag to the newest build.
+* The workflow installs npm dependencies (`wasi-host`), compiles the modules, executes verification test suites (`npm test` and `./scripts/test.sh`), packages the standalone npm distribution tarball (`dist/clang-wasi-19.1.0-build1.tgz`), uploads release assets (`llvm-box.wasm`, `sysroot.tar.gz`, `clang-wasi-19.1.0-build1.tgz`, and `clang-wasi-19.tar.gz`) to both the versioned release and the rolling `latest` release, and force-updates the `latest` git tag to the newest build.
 
 ### Downstream Integration via NPM
 
@@ -251,7 +250,7 @@ Downstream projects (e.g. `wasm-c-ide`) can directly install the published npm p
 ```json
 {
   "dependencies": {
-    "clang-wasi": "https://github.com/breeze833/clang-wasi/releases/download/latest/clang-wasi-19.1.0.tgz"
+    "clang-wasi": "https://github.com/breeze833/clang-wasi/releases/download/latest/clang-wasi-19.1.0-build1.tgz"
   }
 }
 ```

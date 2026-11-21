@@ -4,7 +4,7 @@
 
 `clang-wasi` provides standalone, zero-backend, WebAssembly-native toolchain binaries for **Clang**, **Clang++**, and **LLD (`wasm-ld`)**, targeting the standard **WASI Snapshot Preview 1 (`wasm32-wasip1`)** environment.
 
-In addition to compiled toolchain binaries, `clang-wasi` provides **`src/wasi-host.js`**, an authoritative, zero-dependency, pure JavaScript WASI Preview 1 runtime host that directly binds WebAssembly instances to in-memory Virtual File Systems (`Map` / `Uint8Array`) without `memfs.wasm` or third-party emulators.
+`clang-wasi` provides standalone, WebAssembly-native toolchain binaries for **Clang**, **Clang++**, and **LLD (`wasm-ld`)**, targeting the standard **WASI Snapshot Preview 1 (`wasm32-wasip1`)** environment, along with high-level compiler drivers (`src/driver.js`, `src/toolchain.js`) powered by the standalone [`wasi-host`](https://github.com/breeze833/wasi-host) WASI Preview 1 host package.
 
 ### Key Objectives:
 - **Up-to-Date LLVM 19 Toolchain**: Cross-compiled from upstream LLVM releases (`llvmorg-19.1.0`) with `wasi-sdk` targeting `wasm32-wasip1`.
@@ -13,11 +13,10 @@ In addition to compiled toolchain binaries, `clang-wasi` provides **`src/wasi-ho
   - Eliminates redundant downloads and memory footprint of separate compiler and linker binaries.
 - **Complete Standalone Sysroot Archive (`sysroot.tar.gz`)**:
   - Bundles standard C headers (`stdio.h`, `stdlib.h`), C++ libc++ headers (`<vector>`, `<iostream>`), compiler-rt builtins (`libclang_rt.builtins.a`), and static runtime libraries (`libc.a`, `libc++.a`, `crt1.o`).
-- **Pure JavaScript WASI Preview 1 Host (`wasi-host.js`)**:
-  - Authoritative, standalone ES module implementing `wasi_snapshot_preview1` and `wasi_unstable`.
-  - Zero double-buffering: WebAssembly read/write syscalls directly interact with JavaScript `Uint8Array` memory without secondary linear memory shims.
+- **Decoupled Pure JavaScript WASI Preview 1 Host (`wasi-host`)**:
+  - Delegates WASI Preview 1 syscall hosting (`wasi_snapshot_preview1` and `wasi_unstable`) to the shared [`wasi-host`](https://github.com/breeze833/wasi-host) package (with `src/wasi-host.js` / `clang-wasi/host` preserved as a backward-compatibility re-export).
+  - Zero double-buffering: WebAssembly read/write syscalls directly interact with JavaScript `Uint8Array` / `OverlayVFS` memory without `memfs.wasm` shims.
   - Universal runtime compatibility: Runs seamlessly in Node.js and browser environments (main thread or Web Worker).
-  - Synchronous execution and stream coordination: Supports blocking `Atomics.wait()` stdin for interactive CLI applications and preloaded stream feeding for pipeline chaining.
 
 ---
 
@@ -42,7 +41,7 @@ In addition to compiled toolchain binaries, `clang-wasi` provides **`src/wasi-ho
 |                                                            │                          |
 |                                                            v                          |
 |  +---------------------------------------------------------------------------------+  |
-|  | Runtime Host Execution Bridge (src/wasi-host.js)                                |  |
+|  | Runtime Host Execution Bridge (via external `wasi-host` package)                  |  |
 |  |                                                                                 |  |
 |  |   +───────────────────────────+         +───────────────────────────────────+   |  |
 |  |   | WasiHost Engine           |         | In-Memory Virtual File System     |   |  |
@@ -120,9 +119,9 @@ WASI Preview 1 does not provide asynchronous POSIX signals, process creation (`f
 
 ---
 
-## 4. Pure JavaScript WASI Preview 1 Host (`WasiHost`)
+## 4. Pure JavaScript WASI Preview 1 Host (`wasi-host` Integration)
 
-`src/wasi-host.js` is the canonical, standalone WASI Preview 1 host implementation. It replaces legacy in-Wasm MemFS architectures.
+`clang-wasi` delegates WASI Preview 1 hosting to the standalone [`wasi-host`](https://github.com/breeze833/wasi-host) package, replacing the legacy embedded host implementation while maintaining `src/wasi-host.js` (`clang-wasi/host`) as a compatibility re-export. It replaces legacy in-Wasm MemFS architectures.
 
 ### 4.1 Zero-MemFS Direct Virtual File System Protocol
 
@@ -131,15 +130,16 @@ Historically, WebAssembly compilation tools relied on `memfs.wasm`—an in-memor
 2. Rigid 16 MB memory limits and hardcoded 1024-inode tables.
 3. Buggy unlinking and offset reuse leading to silent compiler corruptions.
 
-`WasiHost` solves this by directly backing WASI filesystem syscalls with JavaScript memory structures (`Map<string, Uint8Array>` or VFS objects):
+`WasiHost` (imported from `wasi-host`) solves this by directly backing WASI filesystem syscalls with JavaScript memory structures (`Map<string, Uint8Array>` or `vfs-wasi` `OverlayVFS` objects):
 - Zero copy-in / copy-out: WASI scatter/gather calls (`fd_read`, `fd_write`) transfer bytes directly between WebAssembly linear memory (`Uint8Array`) and JavaScript memory.
 - Dynamic scale: File and directory count scales with available JavaScript heap memory.
 - Dynamic Inode Mapping: Maps paths to 64-bit numerical BigInt inodes (`this.inodes.set(path, this.nextInode++)`). Always reports non-zero device identifier (`st_dev = 1n`), preventing Clang from mistaking different header directories as duplicate loops.
+- Toolchain `systemDirs`: `WasmToolchain` passes `systemDirs: ['/dev', '/usr', '/include', '/lib', '/bin']` when instantiating `WasiHost` so Clang/LLD sysroot lookups resolve cleanly against `/`.
 
 ### 4.2 Constructor API & Configuration
 
 ```javascript
-import { WasiHost } from './src/wasi-host.js';
+import { WasiHost } from 'wasi-host'; // or 'clang-wasi/host' (compatibility re-export)
 
 const host = new WasiHost({
   vfs: mapOrVfsObject,            // Map or object containing path -> Uint8Array entries
@@ -254,7 +254,7 @@ The npm package is configured as an ES module providing dedicated entry points:
 - **`"type": "module"`**
 - **Root Entry Point (`.` / `"main"`)**: Maps to `./src/index.js`, providing unified exports for host, driver, and toolchain coordinator.
 - **Dedicated Subpath Exports**:
-  - **`./host`**: Explicitly exports `./src/wasi-host.js` for standalone WASI Preview 1 host integration:
+  - **`./host`**: Re-exports `wasi-host` (`./src/wasi-host.js`) for backward compatibility:
     ```javascript
     import { WasiHost, ProcExit, normalizePath, ESUCCESS } from 'clang-wasi/host';
     ```
@@ -266,12 +266,13 @@ The npm package is configured as an ES module providing dedicated entry points:
     ```javascript
     import { WasmToolchain, AppInstance } from 'clang-wasi/toolchain';
     ```
+- **Runtime Dependency**:
+  - `wasi-host` (`https://github.com/breeze833/wasi-host/releases/download/latest/wasi-host-0.1.0.tgz`)
 - **Included Files**: Strictly scoped to runtime files and technical documentation:
-  - `src/index.js`: Unified exports for host, driver, and toolchain.
-  - `src/wasi-host.js`: Pure JavaScript WASI Preview 1 host implementation.
+  - `src/index.js`: Unified exports for host (re-exported from `wasi-host`), driver, and toolchain.
+  - `src/wasi-host.js`: Backward-compatible re-export of `wasi-host`.
   - `src/driver.js`: High-level GCC/Clang CLI argument parser and execution pipeline.
   - `src/toolchain.js`: High-level `llvm-box.wasm` WasmToolchain and AppInstance coordinator.
-  - `dist/wasi-host.js`: Release copy of the host implementation.
   - `docs/HOST_FUNCTIONS.md`: Technical specification of WASI Preview 1 host contract and data structures.
   - `README.md`, `LICENSE`, `SPEC.md`.
 
@@ -279,7 +280,7 @@ The npm package is configured as an ES module providing dedicated entry points:
 During release packaging, `npm pack --pack-destination dist/` generates `dist/clang-wasi-<version>.tgz`, which is published to GitHub Releases for direct URL dependency resolution:
 ```json
 "dependencies": {
-  "clang-wasi": "https://github.com/breeze833/clang-wasi/releases/download/latest/clang-wasi-19.1.0.tgz"
+  "clang-wasi": "https://github.com/breeze833/clang-wasi/releases/download/latest/clang-wasi-19.1.0-build1.tgz"
 }
 ```
 

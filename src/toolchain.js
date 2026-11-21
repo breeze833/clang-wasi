@@ -1,7 +1,7 @@
 // High-Level Wasm Toolchain Coordinator for clang-wasi
 // Manages llvm-box.wasm lifecycle, compilation stages, and multicall utilities
 
-import { WasiHost, ProcExit, normalizePath } from './wasi-host.js';
+import { WasiHost, ProcExit, normalizePath } from 'wasi-host';
 
 export { ProcExit, normalizePath };
 
@@ -201,6 +201,21 @@ export class WasmToolchain {
     return this.llvmBoxPromise;
   }
 
+  _createHost(cwd, argv, environ) {
+    const write = (str) => {
+      if (typeof this.hostWrite === 'function') this.hostWrite(str);
+    };
+    return new WasiHost({
+      vfs: this.vfs,
+      cwd,
+      argv,
+      environ,
+      systemDirs: ['/dev', '/usr', '/include', '/lib', '/bin'],
+      stdout: write,
+      stderr: write,
+    });
+  }
+
   async runTool(toolName, toolArgs = [], options = {}) {
     await this.init();
     const llvmBox = this.llvmBoxModule;
@@ -209,19 +224,7 @@ export class WasmToolchain {
     }
     const cwd = options.cwd || '/workspace';
     const environ = { USER: 'wasi', HOME: '/workspace', PWD: cwd, ...(options.environ || {}) };
-
-    const wasiHost = new WasiHost({
-      vfs: this.vfs,
-      cwd,
-      argv: [toolName, ...toolArgs],
-      environ,
-      stdout: (str) => {
-        if (typeof this.hostWrite === 'function') this.hostWrite(str);
-      },
-      stderr: (str) => {
-        if (typeof this.hostWrite === 'function') this.hostWrite(str);
-      },
-    });
+    const wasiHost = this._createHost(cwd, [toolName, ...toolArgs], environ);
 
     try {
       const app = await AppInstance.create(llvmBox, wasiHost, toolName, ...toolArgs);
@@ -238,19 +241,7 @@ export class WasmToolchain {
     }
     const cwd = options.cwd || '/workspace';
     const environ = { USER: 'wasi', HOME: '/workspace', PWD: cwd, ...(options.environ || {}) };
-
-    const wasiHost = new WasiHost({
-      vfs: this.vfs,
-      cwd,
-      argv: [toolName, ...toolArgs],
-      environ,
-      stdout: (str) => {
-        if (typeof this.hostWrite === 'function') this.hostWrite(str);
-      },
-      stderr: (str) => {
-        if (typeof this.hostWrite === 'function') this.hostWrite(str);
-      },
-    });
+    const wasiHost = this._createHost(cwd, [toolName, ...toolArgs], environ);
 
     try {
       const app = AppInstance.createSync(llvmBox, wasiHost, toolName, ...toolArgs);
@@ -383,18 +374,7 @@ export class WasmToolchain {
     const args = this._buildCompileArgs(sourcePath, objPath, mode, customFlags, options);
     const cwd = options.cwd || '/workspace';
     const environ = { USER: 'wasi', HOME: '/workspace', PWD: cwd, ...(options.environ || {}) };
-
-    const wasiHost = new WasiHost({
-      vfs: this.vfs,
-      cwd,
-      environ,
-      stdout: (str) => {
-        if (typeof this.hostWrite === 'function') this.hostWrite(str);
-      },
-      stderr: (str) => {
-        if (typeof this.hostWrite === 'function') this.hostWrite(str);
-      },
-    });
+    const wasiHost = this._createHost(cwd, ['clang', ...args], environ);
 
     try {
       const app = await AppInstance.create(this.llvmBoxModule, wasiHost, 'clang', ...args);
@@ -408,18 +388,7 @@ export class WasmToolchain {
     const args = this._buildCompileArgs(sourcePath, objPath, mode, customFlags, options);
     const cwd = options.cwd || '/workspace';
     const environ = { USER: 'wasi', HOME: '/workspace', PWD: cwd, ...(options.environ || {}) };
-
-    const wasiHost = new WasiHost({
-      vfs: this.vfs,
-      cwd,
-      environ,
-      stdout: (str) => {
-        if (typeof this.hostWrite === 'function') this.hostWrite(str);
-      },
-      stderr: (str) => {
-        if (typeof this.hostWrite === 'function') this.hostWrite(str);
-      },
-    });
+    const wasiHost = this._createHost(cwd, ['clang', ...args], environ);
 
     try {
       const app = AppInstance.createSync(this.llvmBoxModule, wasiHost, 'clang', ...args);
@@ -502,17 +471,7 @@ export class WasmToolchain {
   async link(objPaths, outputPath, customFlags = []) {
     await this.init();
     const args = this._buildLinkArgs(objPaths, outputPath, customFlags);
-
-    const wasiHost = new WasiHost({
-      vfs: this.vfs,
-      cwd: '/workspace',
-      stdout: (str) => {
-        if (typeof this.hostWrite === 'function') this.hostWrite(str);
-      },
-      stderr: (str) => {
-        if (typeof this.hostWrite === 'function') this.hostWrite(str);
-      },
-    });
+    const wasiHost = this._createHost('/workspace', ['wasm-ld', ...args]);
 
     try {
       const app = await AppInstance.create(this.llvmBoxModule, wasiHost, 'wasm-ld', ...args);
@@ -524,17 +483,7 @@ export class WasmToolchain {
 
   linkSync(objPaths, outputPath, customFlags = []) {
     const args = this._buildLinkArgs(objPaths, outputPath, customFlags);
-
-    const wasiHost = new WasiHost({
-      vfs: this.vfs,
-      cwd: '/workspace',
-      stdout: (str) => {
-        if (typeof this.hostWrite === 'function') this.hostWrite(str);
-      },
-      stderr: (str) => {
-        if (typeof this.hostWrite === 'function') this.hostWrite(str);
-      },
-    });
+    const wasiHost = this._createHost('/workspace', ['wasm-ld', ...args]);
 
     try {
       const app = AppInstance.createSync(this.llvmBoxModule, wasiHost, 'wasm-ld', ...args);

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Git release tag to create (e.g. v19.1.0). Leave empty to use package.json version.'
+        description: 'Git release tag to create (e.g. v19.1.0-build1). Leave empty to use package.json version.'
         required: false
         type: string
         default: ''
@@ -45,6 +45,9 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install npm dependencies
+        run: npm install
+
       - name: Build Clang and LLD WASM toolchain
         run: |
           chmod +x scripts/build.sh
@@ -67,7 +70,6 @@ jobs:
           path: |
             dist/llvm-box.wasm
             dist/sysroot.tar.gz
-            dist/wasi-host.js
             dist/*.tgz
             clang-wasi-19.tar.gz
           if-no-files-found: error
@@ -95,20 +97,44 @@ jobs:
           draft: ${{ inputs.draft || false }}
           prerelease: ${{ inputs.prerelease || false }}
           generate_release_notes: true
+          make_latest: "true"
           files: |
             dist/llvm-box.wasm
             dist/sysroot.tar.gz
-            dist/wasi-host.js
             dist/*.tgz
             clang-wasi-19.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Switch 'latest' tag to newest build
+        if: ${{ !inputs.draft }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -f latest "${{ github.sha }}"
           git push --force origin refs/tags/latest
+
+      - name: Remove stale rolling 'latest' release
+        if: ${{ !inputs.draft }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes || true
+
+      - name: Publish rolling 'latest' release
+        if: ${{ !inputs.draft }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest (${{ steps.vars.outputs.tag }})"
+          body: "Rolling release pointing to `${{ steps.vars.outputs.tag }}` (`${{ github.sha }}`)."
+          make_latest: "false"
+          files: |
+            dist/llvm-box.wasm
+            dist/sysroot.tar.gz
+            dist/*.tgz
+            clang-wasi-19.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
