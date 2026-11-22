@@ -267,7 +267,7 @@ The npm package is configured as an ES module providing dedicated entry points:
     import { WasmToolchain, AppInstance } from 'clang-wasi/toolchain';
     ```
 - **Runtime Dependency**:
-  - `wasi-host` (`https://github.com/breeze833/wasi-host/releases/download/latest/wasi-host-0.1.0.tgz`)
+  - `wasi-host` (`https://github.com/breeze833/wasi-host/releases/download/v0.1.1/wasi-host-0.1.1.tgz`)
 - **Included Files**: Strictly scoped to runtime files and technical documentation:
   - `src/index.js`: Unified exports for host (re-exported from `wasi-host`), driver, and toolchain.
   - `src/wasi-host.js`: Backward-compatible re-export of `wasi-host`.

@@ -21,7 +21,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "wasi-host": "https://github.com/breeze833/wasi-host/releases/download/latest/wasi-host-0.1.0.tgz"
+    "wasi-host": "https://github.com/breeze833/wasi-host/releases/download/v0.1.1/wasi-host-0.1.1.tgz"
   },
   "scripts": {
     "test": "node examples/host-reference.js && node scripts/test-wasi-host.js && node scripts/test-driver.js",
