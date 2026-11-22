@@ -3,7 +3,7 @@
 **Module:** `clang-wasi`  
 **Target Triple:** `wasm32-wasip1`  
 **Target Specification:** WASI Preview 1 (`wasi_snapshot_preview1`) + In-Memory VFS  
-**Reference Host:** `src/wasi-host.js` / `examples/host-reference.js`
+**Reference Host:** [`wasi-host`](https://github.com/breeze833/wasi-host) (`src/wasi-host.js` compatibility re-export) / `examples/host-reference.js`
 
 ---
 
@@ -286,20 +286,20 @@ The table below lists all 30 functions imported and invoked by `llvm-box.wasm`:
 #### `path_link(old_fd: i32, old_flags: i32, old_path_ptr: i32, old_path_len: i32, new_fd: i32, new_path_ptr: i32, new_path_len: i32) -> i32`
 - **Triggering C / POSIX Mechanism:** `link(old, new)`.
 - **Signature:** `(old_fd: i32, old_flags: i32, old_path_ptr: i32, old_path_len: i32, new_fd: i32, new_path_ptr: i32, new_path_len: i32) -> i32`
-- **Semantics:** Creates hard link alias sharing underlying byte buffer in VFS.
-- **Return Code:** `0` (`ESUCCESS`).
+- **Semantics:** Stubbed in `wasi-host` (in-memory VFS stores do not require hard-link tracking for Clang/LLD execution).
+- **Return Code:** `52` (`ENOSYS`).
 
 #### `path_symlink(old_path_ptr: i32, old_path_len: i32, fd: i32, new_path_ptr: i32, new_path_len: i32) -> i32`
 - **Triggering C / POSIX Mechanism:** `symlink(target, linkpath)`.
 - **Signature:** `(old_path_ptr: i32, old_path_len: i32, fd: i32, new_path_ptr: i32, new_path_len: i32) -> i32`
-- **Semantics:** Registers symbolic link entry pointing to target string.
-- **Return Code:** `0` (`ESUCCESS`).
+- **Semantics:** Stubbed in `wasi-host`.
+- **Return Code:** `52` (`ENOSYS`).
 
 #### `path_readlink(fd: i32, path_ptr: i32, path_len: i32, buf_out: i32, buf_len: i32, nwritten_out: i32) -> i32`
 - **Triggering C / POSIX Mechanism:** `readlink(path, buf, bufsiz)`.
 - **Signature:** `(fd: i32, path_ptr: i32, path_len: i32, buf_out: i32, buf_len: i32, nwritten_out: i32) -> i32`
-- **Semantics:** Resolves symlink target string into `buf_out`. Writes bytes copied to `nwritten_out`.
-- **Return Code:** `0` (`ESUCCESS`) or `44` (`ENOENT`).
+- **Semantics:** Stubbed in `wasi-host`.
+- **Return Code:** `52` (`ENOSYS`).
 
 ---
 
@@ -314,19 +314,19 @@ The table below lists all 30 functions imported and invoked by `llvm-box.wasm`:
 #### `clock_res_get(clock_id: i32, resolution_out: i32) -> i32`
 - **Triggering C / POSIX Mechanism:** `clock_getres`.
 - **Signature:** `(clock_id: i32, resolution_out: i32) -> i32`
-- **Semantics:** Reports timer resolution (1,000,000 ns for realtime, 1 ns for monotonic). Writes u64 to `resolution_out`.
+- **Semantics:** Reports timer resolution (`1000n` ns) as u64 at `resolution_out`.
 - **Return Code:** `0` (`ESUCCESS`).
 
 #### `poll_oneoff(in_ptr: i32, out_ptr: i32, nsubscriptions: i32, nevents_out: i32) -> i32`
 - **Triggering C / POSIX Mechanism:** `poll`, `select`, `nanosleep`, `sleep`, `usleep`.
 - **Signature:** `(in_ptr: i32, out_ptr: i32, nsubscriptions: i32, nevents_out: i32) -> i32`
-- **Semantics:** Processes timer subscriptions (`__WASI_EVENTTYPE_CLOCK`). Executes synchronous sleep loop for requested duration and serializes completed events to `out_ptr`. Writes count of events to `nevents_out`.
+- **Semantics:** Processes clock and fd subscriptions (`EVENTTYPE_CLOCK`, `EVENTTYPE_FD_READ`, `EVENTTYPE_FD_WRITE`). Waits synchronously via `Atomics.wait()` on a private 4-byte `SharedArrayBuffer` in workers (with bounded fallback when `Atomics.wait` is unavailable) and serializes completed events to `out_ptr`. Writes count of events to `nevents_out`.
 - **Return Code:** `0` (`ESUCCESS`).
 
 #### `random_get(buf_ptr: i32, buf_len: i32) -> i32`
 - **Triggering C / POSIX Mechanism:** `getentropy`, `arc4random_buf`, LLVM random ID generator.
 - **Signature:** `(buf_ptr: i32, buf_len: i32) -> i32`
-- **Semantics:** Populates buffer at `buf_ptr` with cryptographically secure random bytes via Web Crypto API (`crypto.getRandomValues()`).
+- **Semantics:** Populates buffer at `buf_ptr` with cryptographically secure random bytes via Web Crypto API (`crypto.getRandomValues()`), chunked to 65,536 bytes per call and `SharedArrayBuffer`-safe.
 - **Return Code:** `0` (`ESUCCESS`).
 
 ---
@@ -346,6 +346,8 @@ All WASI functions return an integer status code:
 | `ENOSYS` | `52` | Function not supported / not implemented |
 | `ENOTDIR` | `54` | Not a directory |
 | `EPERM` | `63` | Operation not permitted |
+| `EROFS` | `65` | Read-only file system |
+| `ENOTEMPTY` | `66` | Directory not empty |
 
 ---
 

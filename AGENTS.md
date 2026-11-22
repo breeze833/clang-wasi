@@ -78,7 +78,7 @@ This repository eliminates `memfs.wasm` entirely by delegating WASI Preview 1 ho
 - `src/wasi-host.js`: Compatibility re-export of the standalone `wasi-host` package.
 - `src/driver.js`: High-level GCC/Clang CLI driver and argument parser (`parseCompilerArgs`, `executeGccCommand`, `executeLdCommand`, `executeToolCommand`).
 - `src/toolchain.js`: High-level WebAssembly toolchain coordinator (`WasmToolchain`, `AppInstance`).
-- `examples/host-reference.js`: Standalone zero-dependency reference runner with modular exports and integrated self-verification.
+- `examples/host-reference.js`: Standalone reference runner (powered by `wasi-host`) with modular exports and integrated self-verification.
 - `examples/wasi-host-run.js`: Standalone runner compiling, linking, and running C code in memory.
 - `scripts/test-wasi-host.js`: Automated verification test suite for C and C++ toolchain operations.
 - `scripts/test-driver.js`: Automated verification test suite for compiler driver and multicall utilities.

@@ -165,7 +165,7 @@ const objBytes = vfs.get('/workspace/main.o');
 
 ### 3. Standalone Reference Host & Self-Verification (`examples/host-reference.js`)
 
-Run the zero-dependency reference runner to unpack the sysroot into an in-memory VFS, compile C and C++ programs with `llvm-box.wasm`, link with `wasm-ld`, and execute the resulting WebAssembly executables with assertions:
+Run the standalone reference runner (`examples/host-reference.js`, powered by `wasi-host`) to unpack the sysroot into an in-memory VFS, compile C and C++ programs with `llvm-box.wasm`, link with `wasm-ld`, and execute the resulting WebAssembly executables with assertions:
 
 ```bash
 # Run standalone reference runner
@@ -178,14 +178,14 @@ npm test
 External integrators (such as `wasm-c-ide` or educational platforms) can import `WasiHost` and the helper drivers directly:
 
 ```javascript
-const {
+import {
   WasiHost,
   createVfsFromSysroot,
   compileC,
   compileCpp,
   linkWasm,
   runWasm,
-} = require('./examples/host-reference.js');
+} from './examples/host-reference.js';
 ```
 
 ---

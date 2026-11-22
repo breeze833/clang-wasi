@@ -240,7 +240,7 @@ try {
 2. **Decoupling of Foreign Shell Hooks**: Interactive shell hooks (`__host_pipe`, `__host_dup`, `__host_dup2`, `__host_winsize`, `__host_winch`, `__host_interrupt`, `__host_sock_*`, `__host_builtin_*`, `wasi_host_spawn`) which originated in foreign BusyBox shell environments are decoupled and removed from `src/wasi-host.js`.
 3. **Reference Host & Component Provider Contract**:
    - `docs/HOST_FUNCTIONS.md` is the authoritative technical specification for host function signatures, memory layouts (`__wasi_ciovec_t`, `__wasi_iovec_t`, `__wasi_filestat_t`, `__wasi_fdstat_t`, `__wasi_dirent_t`, `__wasi_prestat_t`), and error codes.
-   - `examples/host-reference.js` provides a zero-dependency, production-grade reference runner implementing 100% of the contract and providing integrated self-verification (`npm test` / `node examples/host-reference.js`).
+   - `examples/host-reference.js` provides a standalone reference runner powered by `wasi-host` implementing 100% of the contract and providing integrated self-verification (`npm test` / `node examples/host-reference.js`).
    - If downstream integrators (such as `wasm-c-ide` or interactive shells) require custom `env` bindings, `WasiHost.prototype.createImportObject(customEnv)` accepts custom extensions with permissive fallback proxies.
 
 ---
